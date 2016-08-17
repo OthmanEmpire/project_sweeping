@@ -1,0 +1,1 @@
+The average time of exit and std is 643.52,176.91

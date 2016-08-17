@@ -1,0 +1,8 @@
+FR        ASH       AWA       N         N_OUT     EXIT      MULTI     DATE      PATH      
+50        0.22      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.22.csv
+50        0.24      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.24.csv
+50        0.25      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.25.csv
+50        0.26      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.26.csv
+50        0.27      -2.25     100       13        0.13      0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.27.csv
+50        0.28      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.28.csv
+50        0.29      -2.25     0         0         -         0         13Aug     ../test/folder_structure/results_smaller/13Aug_uni_50/exit_time_raw_output_0&-2.25&0.29.csv
