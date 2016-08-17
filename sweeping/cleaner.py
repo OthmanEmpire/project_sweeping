@@ -11,6 +11,8 @@ __date__ = "2016-08-15"
 """
 import os
 import sys
+import time
+import datetime
 
 
 class Janitor:
@@ -28,32 +30,43 @@ class Janitor:
         :param dataPath: The path to the folder containing all the data.
         """
         self.dataPath = dataPath
-        self.databasePath = os.path.join(".", "database.txt")
+        self.outputPath = os.path.join(".", "database.txt")
+        self.errorLogPath = os.path.join(".", "error_log.txt")
 
         # Formatting variables for CSV database file
         self.dataOrder = ["FR", "ASH", "AWA", "N", "N_OUT", "EXIT", "MULTI",
                           "DATE", "PATH"]
         self.databaseTemplate = len(self.dataOrder) * "{:<10}" + "\n"
 
-    def cleanDatabase(self):
+    def cleanDatabaseFile(self):
         """
         Creates an empty database file with a header if it doesn't exist
         otherwise empties the contents of the existing one and adds a header.
         """
-        database = open(self.databasePath, "w")
+        database = open(self.outputPath, "w")
         header = self.databaseTemplate.format(*self.dataOrder)
         database.write(header)
         database.close()
+
+    def cleanLogFile(self):
+        """
+        Deletes the log file if it already exists.
+        """
+        if os.path.exists(self.errorLogPath):
+            os.remove(self.errorLogPath)
 
     def populateDatabase(self):
         """
         Initializes the database and then populates it with entries.
         """
-        # Generates a new empty database file (with a header)
-        self.cleanDatabase()
+        # Generates a new empty database file (with a header) and
+        # removes the log file if it exists
+        self.cleanDatabaseFile()
+        self.cleanLogFile()
 
         # Loops over all valid file paths and builds the database
         for path in self.listAllFilePaths():
+
             # Extends the path from root to the data file
             path = os.path.join(self.dataPath, path)
 
@@ -63,7 +76,10 @@ class Janitor:
                 dataFromPath = self.pickDataFromPath(path)
                 dataFromFile = self.pickDataFromFile(path)
             except ValueError as e:
-                print(e)
+                with open(self.errorLogPath, "a") as errorLog:
+                    stamp = datetime.datetime.fromtimestamp(time.time())
+                    stamp = stamp.strftime("%m/%d %H:%M:%S")
+                    errorLog.write("{}, {}\n".format(stamp, str(e)))
                 continue
 
             # Merging both dictionaries
@@ -86,7 +102,7 @@ class Janitor:
             orderedEntry.append(entryData[order])
 
         # Formats the entry data nicely and writes it into the database
-        with open(self.databasePath, "a") as db:
+        with open(self.outputPath, "a") as db:
             entry = self.databaseTemplate.format(*orderedEntry)
             db.write(entry)
 

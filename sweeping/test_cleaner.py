@@ -107,24 +107,24 @@ class TestExtractor(unittest.TestCase):
 
         # Reads all the pre-processed data paths from a file and formats
         # the paths appropriately to allow easy comparing down the line
-        expectedPaths = []
+        databasePaths = []
         with open(allPathsFile, "r") as file:
             for path in file:
                 path = path.strip().split("/")
                 path = os.path.join(*path)
-                expectedPaths.append(path)
+                databasePaths.append(path)
 
         # Attempts to processes the data paths (requires I/O reading)
         paths = self.extractor.listAllFilePaths()
 
         # Sorting otherwise ordering of elements which isn't
         # significant causes the test to fail
-        expectedPaths = sorted(expectedPaths)
+        databasePaths = sorted(databasePaths)
         paths = sorted(paths)
 
         # Compares element by element basis
         for i, _ in enumerate(paths):
-            self.assertEqual(paths[i], expectedPaths[i])
+            self.assertEqual(paths[i], databasePaths[i])
 
 
 # A list of integration tests that need not to be ran
@@ -139,41 +139,69 @@ class TestIntegrationExtractor(unittest.TestCase):
 
     def testPopulateMockSubsetDatabase(self):
         """
-        Tests whether the smaller database is populated properly.
+        Tests whether the subset of the mock database can populate properly.
         """
         resultsPath = os.path.join(self.testPath,
                                    "results", "mock_subset")
+        outputPath = os.path.join(self.testPath,
+                                  "database", "mock_subset_output.txt")
         databasePath = os.path.join(self.testPath,
-                                    "database", "mock_subset_output.txt")
-        expectedPath = os.path.join(self.testPath,
                                     "database", "mock_subset.txt")
+        logPath = os.path.join(self.testPath,
+                               "database", "mock_subset_log.txt")
+        self._assertPopulateDatabase(resultsPath, outputPath, databasePath,
+                                     logPath)
 
-        # Populates the database after changing paths
-        extractor = Janitor(resultsPath)
-        extractor.databasePath = databasePath
-        extractor.populateDatabase()
-
-        # Checks whether expected and produced files match
-        self.assertTrue(filecmp.cmp(databasePath, expectedPath, shallow=False))
-
-    def testPopulateSampleDatabase(self):
+    def testPopulateSampleSubsetDatabase(self):
         """
-        Tests whether the sample database can be populated properly.
+        Tests whether the subset of the sample database can populate properly.
         """
         resultsPath = os.path.join(self.testPath,
                                    "results", "sample_subset")
+        outputPath = os.path.join(self.testPath,
+                                  "database", "sample_subset_output.txt")
         databasePath = os.path.join(self.testPath,
-                                    "database", "sample_subset_output.txt")
-        expectedPath = os.path.join(self.testPath,
                                     "database", "sample_subset.txt")
+        logPath = os.path.join(self.testPath,
+                               "database", "sample_subset_log.txt")
+        self._assertPopulateDatabase(resultsPath, outputPath, databasePath,
+                                     logPath)
 
-        # Populates the database after changing paths
+    def testPopulateSampleProcessedDatabase(self):
+        """
+        Tests whether the sample database can populate properly.
+        """
+        resultsPath = os.path.join(self.testPath,
+                                   "results", "sample")
+        outputPath = os.path.join(self.testPath,
+                                  "database", "sample_processed_output.txt")
+        databasePath = os.path.join(self.testPath,
+                                    "database", "sample_processed.txt")
+        logPath = os.path.join(self.testPath,
+                               "database", "sample_processed_log.txt")
+        #Debugger().debugFileComparing(outputPath, databasePath)
+        self._assertPopulateDatabase(resultsPath, outputPath, databasePath,
+                                     logPath)
+
+    def _assertPopulateDatabase(self, resultsPath, outputPath, databasePath,
+                                logPath):
+        """
+        Populates the database and then proceeds to assert whether the output
+        matches the expected results.
+
+        :param resultsPath: The path to the data/results folder.
+        :param outputPath: The path to the database file to be generated.
+        :param databasePath: The path to the expected database file.
+        :param logPath: The path to the error log file to be generated.
+        """
+        # Populates the database after changing the default output path
         extractor = Janitor(resultsPath)
-        extractor.databasePath = databasePath
+        extractor.outputPath = outputPath
+        extractor.errorLogPath = logPath
         extractor.populateDatabase()
 
         # Checks whether expected and produced files match
-        self.assertTrue(filecmp.cmp(databasePath, expectedPath, shallow=False))
+        self.assertTrue(filecmp.cmp(outputPath, databasePath, shallow=False))
 
 
 # A helper class (used for debugging file comparing assertions)
@@ -182,17 +210,17 @@ class Debugger(unittest.TestCase):
     A simple class designed to help debug some common problems.
     """
 
-    def debugFileComparing(self, file1, file2):
+    def debugFileComparing(self, filePath1, filePath2):
         """
         Asserts that the two files are equal line by line.
 
         Use this function to help debug when file comparing tests fail.
 
-        :param file1: Path to the first file to be compared.
-        :param file2: Path to the second file to be compared.
+        :param filePath1: Path to the first file to be compared.
+        :param filePath2: Path to the second file to be compared.
         """
 
-        with open(file1, "r") as f1, open(file2, "r") as f2:
+        with open(filePath1, "r") as f1, open(filePath2, "r") as f2:
             contents1 = f1.readlines()
             contents2 = f2.readlines()
 
@@ -203,5 +231,23 @@ class Debugger(unittest.TestCase):
             self.assertEqual(contents1[i], contents2[i])
 
 
+def cleanDatabaseDir():
+    """
+    Removes all output and log files generated in the database directory.
+    """
+    deleteFilesContaining = ["log", "output"]
+    databaseDir = os.path.join("..", "test", "database")
+
+    # Lists all the files in the database directory then loops over
+    # all the files and removes any that match a key word in the filter
+    for root, _, files in os.walk(databaseDir):
+        for file in files:
+            for filter in deleteFilesContaining:
+                if filter in file:
+                    os.remove(os.path.join(root, file))
+                    break
+
+
 if __name__ == '__main__':
-    unittest.main()
+    #unittest.main()
+    cleanDatabaseDir()
