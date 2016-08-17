@@ -9,14 +9,11 @@ __author__ = "Othman Alikhan"
 __email__ = "sc14omsa@leeds.ac.uk"
 __date__ = "2016-08-15"
 """
-import filecmp
 import os
-import unittest
-import mock
 import sys
 
 
-class Extractor:
+class Janitor:
     """
     Responsible for extracting/parsing data from files and their paths,
     thereafter storing the extracted data in a separate file. Putting it
@@ -38,7 +35,7 @@ class Extractor:
                           "DATE", "PATH"]
         self.databaseTemplate = len(self.dataOrder) * "{:<10}" + "\n"
 
-    def initializeDatabase(self):
+    def cleanDatabase(self):
         """
         Creates an empty database file with a header if it doesn't exist
         otherwise empties the contents of the existing one and adds a header.
@@ -53,21 +50,26 @@ class Extractor:
         Initializes the database and then populates it with entries.
         """
         # Generates a new empty database file (with a header)
-        self.initializeDatabase()
+        self.cleanDatabase()
 
         for path in self.listAllFilePaths():
             # Extends the path from root to the data file
             path = os.path.join(self.dataPath, path)
-            dataFromPath = self.extractDataFromPath(path)
-            dataFromFile = self.extractDataFromFile(path)
+
+            # TODO: Working! ! !
+            try:
+                dataFromPath = self.pickDataFromPath(path)
+                dataFromFile = self.pickDataFromFile(path)
+            except ValueError as e:
+                continue
 
             # Merging both dictionaries
             data = dataFromPath.copy()
             data.update(dataFromFile)
 
-            self.addDatabaseEntry(data)
+            self.putDatabaseEntry(data)
 
-    def addDatabaseEntry(self, entryData):
+    def putDatabaseEntry(self, entryData):
         """
         Writes the given entry data into the supplied database in the
         correct format.
@@ -85,7 +87,7 @@ class Extractor:
             entry = self.databaseTemplate.format(*orderedEntry)
             db.write(entry)
 
-    def extractDataFromPath(self, filePath):
+    def pickDataFromPath(self, filePath):
         """
         Parses the given file path and extracts data from it which is then
         returned as a dictionary. The data parsed contains: fructose
@@ -132,7 +134,7 @@ class Extractor:
         }
         return dataExtracted
 
-    def extractDataFromFile(self, filePath):
+    def pickDataFromFile(self, filePath):
         """
         Reads the given file name, parses the contents to extract data.
         The data parsed contains: the total number of worms, the worms
@@ -230,6 +232,6 @@ if __name__ == '__main__':
                         "namely the path to the data directory.")
     else:
         dataPath = os.path.join(sys.argv[1])
-        extractor = Extractor(dataPath)
+        extractor = Janitor(dataPath)
         extractor.populateDatabase()
 

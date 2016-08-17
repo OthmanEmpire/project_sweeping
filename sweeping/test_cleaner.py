@@ -9,7 +9,7 @@ import filecmp
 import os
 import unittest
 import mock
-from sweeping.cleaner import Extractor
+from sweeping.cleaner import Janitor
 
 
 # A list of unit tests that need not to be ran
@@ -22,7 +22,7 @@ class TestExtractor(unittest.TestCase):
         """
         Constructs an Extractor instance before running any test.
         """
-        self.extractor = Extractor(os.path.join("..", "test", "results_mock"))
+        self.extractor = Janitor(os.path.join("..", "test", "results_mock"))
 
     def testAddDatabaseEntry(self):
         """
@@ -52,7 +52,7 @@ class TestExtractor(unittest.TestCase):
         m = mock.mock_open()
         with mock.patch("builtins.open", m, create=True):
             # Adds the database entry
-            self.extractor.addDatabaseEntry(entryData)
+            self.extractor.putDatabaseEntry(entryData)
 
             # Asserting whether written data matches expected
             handle = m()
@@ -75,7 +75,7 @@ class TestExtractor(unittest.TestCase):
             "PATH":     filePath1,
             "DATE":     "12Aug"
         }
-        dataExtracted1 = self.extractor.extractDataFromPath(filePath1)
+        dataExtracted1 = self.extractor.pickDataFromPath(filePath1)
 
         self.assertDictEqual(dataExtracted1, data1)
 
@@ -94,7 +94,7 @@ class TestExtractor(unittest.TestCase):
             "PATH":     filePath
         }
 
-        dataExtracted = self.extractor.extractDataFromFile(filePath)
+        dataExtracted = self.extractor.pickDataFromFile(filePath)
         self.assertDictEqual(dataExtracted, data)
 
     def testListAllFilePaths(self):
@@ -142,7 +142,7 @@ class TestIntegrationExtractor(unittest.TestCase):
                                     "database_smaller.txt")
 
         # Populates the database after changing paths
-        extractor = Extractor(resultsPath)
+        extractor = Janitor(resultsPath)
         extractor.databasePath = databasePath
         extractor.populateDatabase()
 
@@ -157,11 +157,11 @@ class TestIntegrationExtractor(unittest.TestCase):
                                    "results_sample")
         databasePath = os.path.join("..", "test", "database"
                                     "database_sample_output.txt")
-        expectedPath = os.path.join("..", "test", "database"
-                                    "database_sample_netta.txt")
+        expectedPath = os.path.join("..", "test", "database",
+                                    "database_sample.txt")
 
         # Populates the database after changing paths
-        extractor = Extractor(resultsPath)
+        extractor = Janitor(resultsPath)
         extractor.databasePath = databasePath
         extractor.populateDatabase()
 
