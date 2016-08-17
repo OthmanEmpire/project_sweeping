@@ -22,7 +22,7 @@ class TestExtractor(unittest.TestCase):
         """
         Constructs an Extractor instance before running any test.
         """
-        self.extractor = Janitor(os.path.join("..", "test", "results_mock"))
+        self.extractor = Janitor(os.path.join("..", "test", "mock"))
 
     def testAddDatabaseEntry(self):
         """
@@ -102,8 +102,8 @@ class TestExtractor(unittest.TestCase):
         Tests whether all data file paths from the results folder are listed
         as expected.
         """
-        allPathsFile = os.path.join("..", "test", "folder_structure",
-                                    "results_mock_path_list.txt")
+        allPathsFile = os.path.join("..", "test", "results",
+                                    "mock_path_list.txt")
 
         # Reads all the pre-processed data paths from a file and formats
         # the paths appropriately to allow easy comparing down the line
@@ -130,16 +130,23 @@ class TestExtractor(unittest.TestCase):
 # A list of integration tests that need not to be ran
 class TestIntegrationExtractor(unittest.TestCase):
 
-    def testPopulateSmallerDatabase(self):
+    def setUp(self):
+        """
+        Runs this method before every integration test which initializes some
+        variables.
+        """
+        self.testPath = os.path.join("..", "test")
+
+    def testPopulateMockSubsetDatabase(self):
         """
         Tests whether the smaller database is populated properly.
         """
-        resultsPath = os.path.join("..", "test", "folder_structure",
-                                   "results_smaller")
-        databasePath = os.path.join("..", "test", "database",
-                                    "database_smaller_output.txt")
-        expectedPath = os.path.join("..", "test", "database",
-                                    "database_smaller.txt")
+        resultsPath = os.path.join(self.testPath,
+                                   "results", "mock_subset")
+        databasePath = os.path.join(self.testPath,
+                                    "database", "mock_subset_output.txt")
+        expectedPath = os.path.join(self.testPath,
+                                    "database", "mock_subset.txt")
 
         # Populates the database after changing paths
         extractor = Janitor(resultsPath)
@@ -153,12 +160,12 @@ class TestIntegrationExtractor(unittest.TestCase):
         """
         Tests whether the sample database can be populated properly.
         """
-        resultsPath = os.path.join("..", "test", "folder_structure",
-                                   "results_sample")
-        databasePath = os.path.join("..", "test", "database"
-                                    "database_sample_output.txt")
-        expectedPath = os.path.join("..", "test", "database",
-                                    "database_sample.txt")
+        resultsPath = os.path.join(self.testPath,
+                                   "results", "sample_subset")
+        databasePath = os.path.join(self.testPath,
+                                    "database", "sample_subset_output.txt")
+        expectedPath = os.path.join(self.testPath,
+                                    "database", "sample_subset.txt")
 
         # Populates the database after changing paths
         extractor = Janitor(resultsPath)
@@ -167,6 +174,33 @@ class TestIntegrationExtractor(unittest.TestCase):
 
         # Checks whether expected and produced files match
         self.assertTrue(filecmp.cmp(databasePath, expectedPath, shallow=False))
+
+
+# A helper class (used for debugging file comparing assertions)
+class Debugger(unittest.TestCase):
+    """
+    A simple class designed to help debug some common problems.
+    """
+
+    def debugFileComparing(self, file1, file2):
+        """
+        Asserts that the two files are equal line by line.
+
+        Use this function to help debug when file comparing tests fail.
+
+        :param file1: Path to the first file to be compared.
+        :param file2: Path to the second file to be compared.
+        """
+
+        with open(file1, "r") as f1, open(file2, "r") as f2:
+            contents1 = f1.readlines()
+            contents2 = f2.readlines()
+
+        if len(contents1) != len(contents2):
+            print("The amount of lines in both files don't match!")
+
+        for i, _ in enumerate(contents1):
+            self.assertEqual(contents1[i], contents2[i])
 
 
 if __name__ == '__main__':

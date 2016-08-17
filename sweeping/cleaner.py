@@ -52,15 +52,18 @@ class Janitor:
         # Generates a new empty database file (with a header)
         self.cleanDatabase()
 
+        # Loops over all valid file paths and builds the database
         for path in self.listAllFilePaths():
             # Extends the path from root to the data file
             path = os.path.join(self.dataPath, path)
 
-            # TODO: Working! ! !
+            # Attempts to extract data from file path and contents
+            # otherwise stores the error in a separate error log file
             try:
                 dataFromPath = self.pickDataFromPath(path)
                 dataFromFile = self.pickDataFromFile(path)
             except ValueError as e:
+                print(e)
                 continue
 
             # Merging both dictionaries
