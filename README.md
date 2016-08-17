@@ -18,12 +18,13 @@ The project is specifically designed for making management of generated data muc
 
 ## Running
 
-Just place the *"cleaner.py"* file outside the main data/results directory and then enter the following command in your terminal:
-	python cleaner.py <results_path>
+Just place the *cleaner.py* file outside the main data/results directory and then enter the following command in your terminal:  
+    `python cleaner.py <results_path>`
+
 
 ## Authors
 
-Name: Othman Ali Khan
+Name: Othman Ali Khan  
 Email: sc14omsa@leeds.ac.uk
 
 
