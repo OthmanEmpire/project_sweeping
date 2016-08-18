@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import datetime
+import configparser
 
 
 class Janitor:
@@ -23,37 +24,35 @@ class Janitor:
     location so that it is easier to manage.
     """
 
-    def __init__(self, dataPath):
+    def __init__(self, settingsPath):
         """
         A simple constructor initializing paths
 
-        :param dataPath: The path to the folder containing all the data.
+        :param settingsPath: The path to the file containing all the settings.
         """
-        self.dataPath = dataPath
-        self.outputPath = os.path.join(".", "database.txt")
-        self.errorLogPath = os.path.join(".", "error_log.txt")
+        # Reads the .ini file and initializes variables
+        self.prepareSettings(settingsPath)
 
         # Formatting variables for CSV database file
         self.dataOrder = ["FR", "ASH", "AWA", "N", "N_OUT", "EXIT", "MULTI",
                           "DATE", "PATH"]
         self.databaseTemplate = len(self.dataOrder) * "{:<10}" + "\n"
 
-    def cleanDatabaseFile(self):
+    def prepareSettings(self, settingsPath):
         """
-        Creates an empty database file with a header if it doesn't exist
-        otherwise empties the contents of the existing one and adds a header.
-        """
-        database = open(self.outputPath, "w")
-        header = self.databaseTemplate.format(*self.dataOrder)
-        database.write(header)
-        database.close()
+        Reads the settings from the .ini file and initializes the settings.
 
-    def cleanLogFile(self):
+        :param settingsPath: The path to the file containing all the settings.
         """
-        Deletes the log file if it already exists.
-        """
-        if os.path.exists(self.errorLogPath):
-            os.remove(self.errorLogPath)
+        # Reads the .ini file
+        self.config = configparser.ConfigParser()
+        self.config.read(settingsPath)
+
+        # Initializes all paths
+        paths = self.config["PATHS"]
+        self.dataPath = paths["results_dir"]
+        self.outputPath = paths["database_file"]
+        self.errorLogPath = paths["log_file"]
 
     def populateDatabase(self):
         """
@@ -65,7 +64,7 @@ class Janitor:
         self.cleanLogFile()
 
         # Loops over all valid file paths and builds the database
-        for path in self.listAllFilePaths():
+        for path in self.inventoryAllFilePaths():
 
             # Extends the path from root to the data file
             path = os.path.join(self.dataPath, path)
@@ -202,7 +201,7 @@ class Janitor:
             }
             return dataExtracted
 
-    def listAllFilePaths(self):
+    def inventoryAllFilePaths(self):
         """
         Lists all the paths from the results directory to the data files.
         Initially, lists all existing files in the results directory then
@@ -243,14 +242,36 @@ class Janitor:
 
         return pathList
 
+    #TODO: Complete query method
+    def queryDatabase(self, fr, ash, awa, ):
+        """
+
+        :param fr:
+        :param ash:
+        :param awa:
+        :return:
+        """
+
+    def cleanDatabaseFile(self):
+        """
+        Creates an empty database file with a header if it doesn't exist
+        otherwise empties the contents of the existing one and adds a header.
+        """
+        database = open(self.outputPath, "w")
+        header = self.databaseTemplate.format(*self.dataOrder)
+        database.write(header)
+        database.close()
+
+    def cleanLogFile(self):
+        """
+        Deletes the log file if it already exists.
+        """
+        if os.path.exists(self.errorLogPath):
+            os.remove(self.errorLogPath)
+
 
 if __name__ == '__main__':
     # Runs the script, ensuring sufficient arguments are passed
-    if len(sys.argv) != 2:
-        raise NameError("Please insert only one argument, "
-                        "namely the path to the data directory.")
-    else:
-        dataPath = os.path.join(sys.argv[1])
-        extractor = Janitor(dataPath)
-        extractor.populateDatabase()
-
+    dataPath = os.path.join(sys.argv[1])
+    janitor = Janitor(dataPath)
+    janitor.populateDatabase()
