@@ -1,0 +1,2 @@
+FR        ASH       AWA       N         N_OUT     EXIT      MULTI     DATE      PATH      
+100       0.3       -0.55     100       0         0.0       1         16Aug     ../test/results/sample_subset/16Aug_m_100/exit_time_raw_output_1&-0.55&0.3.csv
