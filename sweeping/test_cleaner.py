@@ -1,5 +1,5 @@
 """
-Unit tests and integration tests for the data_sorting module.
+Unit tests and integration tests for the cleaner module.
 
 __author__ = "Othman Alikhan"
 __email__ = "sc14omsa@leeds.ac.uk"
@@ -9,10 +9,12 @@ import filecmp
 import os
 import unittest
 import mock
-from sweeping.cleaner import Janitor
+from sweeping.cleaner import Extractor, Database
 
 
-# A list of unit tests that need not to be ran
+################################# UNIT TESTS ###################################
+
+
 class TestExtractor(unittest.TestCase):
     """
     Unit tests for the Extractor class.
@@ -22,8 +24,150 @@ class TestExtractor(unittest.TestCase):
         """
         Constructs an Extractor instance before running any test.
         """
-        settingsPath = os.path.join("..", "test", "settings", "unittests.ini")
-        self.janitor = Janitor(settingsPath)
+        self.dataPath = os.path.join("..", "test", "results", "type_a")
+        self.extractor = Extractor()
+
+    @mock.patch("sweeping.cleaner.print", create=True)
+    @mock.patch("sweeping.cleaner.Extractor.listAllFilePaths")
+    @mock.patch("sweeping.cleaner.Extractor.extractDataFromPath")
+    @mock.patch("sweeping.cleaner.Extractor.extractDataFromFile")
+    def testExtractAllData(self, mockfileExtract, mockPathExtract,
+                           mockList, mockPrint):
+        """
+        Tests whether all required data can be extracted properly.
+        """
+        error1 = 'WARNING: Could not find a extract a shred of data! ' \
+                 'Perhaps the results directory is incorrectly specified?'
+        error2 = 'WARNING: Some files weren\'t parsed properly, check' \
+                 'error logs for more details!'
+
+        # Covers the case when no data could be extracted
+        self.extractor.extractAllData(self.dataPath, "baz")
+        mockPrint.assert_called_once_with(error1)
+
+        # Covers the case when some data could be extracted
+        mockPrint.reset_mock()
+        mockList.return_value = ["baz"]
+        mockPathExtract.side_effect = ValueError()
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            self.extractor.extractAllData("foo", "bar")
+            mockPrint.assert_called_once_with(error2)
+            mockOpen.assert_has_calls([mock.call("bar", "a")])
+
+        # Covers the case when all data could be extracted
+        mockPrint.reset_mock()
+        mockList.return_value = ["baz"]
+        mockPathExtract.side_effect = None
+        mockPathExtract.return_value = {"FR": "50"}
+        mockfileExtract.return_value = {"N": "100"}
+        data = self.extractor.extractAllData("foo", "bar")[0]
+        self.assertDictEqual(data, {"FR": "50", "N": "100"})
+
+    def testExtractDataFromPath(self):
+        """
+        Tests whether the data extracted from the paths to the data files
+        is parsed correctly from the paths themselves.
+        """
+        filePath = os.path.join("12Aug_m_50",
+                                "exit_time_raw_output_1&-2.2&0.32.csv")
+        data = \
+        {
+            "FR":       "50",
+            "MULTI":     "1",
+            "AWA":      "-2.2",
+            "ASH":      "0.32",
+            "PATH":     filePath,
+            "DATE":     "12Aug"
+        }
+
+        dataExtracted = self.extractor.extractDataFromPath(filePath)
+        self.assertDictEqual(dataExtracted, data)
+
+    def testExtractDataFromFile(self):
+        """
+        Tests whether data extracted from the contents of a data file is
+        done correctly.
+        """
+        filePath = os.path.join("..", "test", "results",
+                                "exit_time_raw_output_0&-2.25&0.27.csv")
+        data = \
+        {
+            "N":        "100",
+            "N_OUT":    "13",
+            "EXIT":     "0.13",
+            "PATH":     filePath
+        }
+
+        dataExtracted = self.extractor.extractDataFromFile(filePath)
+        self.assertDictEqual(dataExtracted, data)
+
+    def testListAllFilePaths(self):
+        """
+        Tests whether all data file paths from the results folder are listed
+        as expected.
+        """
+        allPathsFile = os.path.join("..", "test", "results",
+                                    "type_a_path_list.txt")
+
+        # Reads all the pre-processed data paths from a file and formats
+        # the paths appropriately to allow easy comparing down the line
+        databasePaths = []
+        with open(allPathsFile, "r") as file:
+            for path in file:
+                path = path.strip().split("/")
+                path = os.path.join(*path)
+                databasePaths.append(path)
+
+        # Attempts to processes the data paths (requires I/O reading)
+        paths = self.extractor.listAllFilePaths(self.dataPath)
+
+        # Sorting otherwise ordering of elements which isn't
+        # significant causes the test to fail
+        databasePaths = sorted(databasePaths)
+        paths = sorted(paths)
+
+        # Compares element by element basis
+        for i, _ in enumerate(paths):
+            self.assertEqual(paths[i], databasePaths[i])
+
+    @mock.patch("os.path")
+    @mock.patch("os.remove")
+    def testInitializeLogFile(self, mockRemove, mockPath):
+        """
+        Tests whether the log file can be initialized properly.
+        """
+        mockLogPath = "baz"
+        mockPath.exists.return_value = True
+
+        self.extractor.initializeLogFile(mockLogPath)
+        mockRemove.assert_called_once_with(mockLogPath)
+
+
+class TestDatabase(unittest.TestCase):
+    """
+    Unit tests for the Database class.
+    """
+
+    def setUp(self):
+        """
+        Constructs an Database instance before running any test.
+        """
+        self.database = Database()
+
+    def testInitializeDataFile(self):
+        """
+        Tests whether the data file can be initialized properly.
+        """
+        # Mocking built in opening of file to isolate unit test
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            database = Database()
+            database.initializeDataFile("bar")
+
+            # Asserts whether the header was written into the database file
+            header = database.databaseTemplate.format(*database.dataOrder)
+            mockOpen().write.assert_called_once_with(header)
 
     def testAddDatabaseEntry(self):
         """
@@ -44,92 +188,99 @@ class TestExtractor(unittest.TestCase):
         }
 
         # Orders the entry data and formats it appropriately
-        orderedEntry = []
-        for order in self.janitor.dataOrder:
-            orderedEntry.append(entryData[order])
-        expectedEntry = self.janitor.databaseTemplate.format(*orderedEntry)
+        orderedEntry = [entryData[order] for order in self.database.dataOrder]
+        expectedEntry = self.database.databaseTemplate.format(*orderedEntry)
 
         # Mocking built in opening of file to isolate unit test
-        m = mock.mock_open()
-        with mock.patch("builtins.open", m, create=True):
-            # Adds the database entry
-            self.janitor.putDatabaseEntry(entryData)
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            self.database.addDatabaseEntry("foo", entryData)
 
-            # Asserting whether written data matches expected
-            handle = m()
-            handle.write.assert_called_once_with(expectedEntry)
+            # Asserts whether written data matches expected
+            mockOpen().write.assert_called_once_with(expectedEntry)
 
-    def testExtractDataFromPath(self):
+    @mock.patch("csv.reader")
+    def testQueryDatabase(self, mockReader):
         """
-        Tests whether the data extracted from the paths to the data files
-        is parsed correctly from the paths themselves.
+        Tests whether the database can be queried properly.
         """
-        filePath1 = os.path.join("12Aug_m_50",
-                                 "exit_time_raw_output_1&-2.2&0.32.csv")
-
-        data1 = \
+        query = \
         {
-            "FR":       "50",
-            "MULTI":     "1",
-            "AWA":      "-2.2",
-            "ASH":      "0.32",
-            "PATH":     filePath1,
-            "DATE":     "12Aug"
+            "FR":       "100",
+            "ASH":      "0.30",
+            "AWA":      "-0.55",
+            "MULTI":    "1",
         }
-        dataExtracted1 = self.janitor.pickDataFromPath(filePath1)
 
-        self.assertDictEqual(dataExtracted1, data1)
-
-    def testExtractDataFromFile(self):
-        """
-        Tests whether data extracted from the contents of a data file is
-        done correctly.
-        """
-        filePath = os.path.join("..", "test",
-                                "exit_time_raw_output_0&-2.25&0.27.csv")
-        data = \
+        entry = \
         {
             "N":        "100",
-            "N_OUT":    "13",
-            "EXIT":     "0.13",
-            "PATH":     filePath
+            "N_OUT":    "0",
+            "EXIT":     "0.0",
+            "DATE":     "16Aug",
+            "PATH":     "../test/results/type_a_subset/16Aug_m_100/"
+                        "exit_time_raw_output_1&-0.55&0.3.csv"
         }
+        entry.update(query)     # Merges with queries dictionary
 
-        dataExtracted = self.janitor.pickDataFromFile(filePath)
-        self.assertDictEqual(dataExtracted, data)
+        mockReader.return_value = iter([entry.keys(), entry.values()])
 
-    def testListAllFilePaths(self):
+        # Mocking built in opening of file to isolate unit test
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            database = Database()
+            match = database.queryDatabase("foo", query)[0]
+            self.assertDictEqual(match, entry)
+
+    @mock.patch("os.path")
+    @mock.patch("os.remove")
+    def testPopulateDatabase(self, mockRemove, mockPath):
         """
-        Tests whether all data file paths from the results folder are listed
-        as expected.
+        Tests whether the database can be populated properly.
         """
-        allPathsFile = os.path.join("..", "test", "results",
-                                    "mock_path_list.txt")
+        entry = \
+        {
 
-        # Reads all the pre-processed data paths from a file and formats
-        # the paths appropriately to allow easy comparing down the line
-        databasePaths = []
-        with open(allPathsFile, "r") as file:
-            for path in file:
-                path = path.strip().split("/")
-                path = os.path.join(*path)
-                databasePaths.append(path)
+            "FR":       "100",
+            "ASH":      "0.30",
+            "AWA":      "-0.55",
+            "MULTI":    "1",
+            "N":        "100",
+            "N_OUT":    "0",
+            "EXIT":     "0.0",
+            "DATE":     "16Aug",
+            "PATH":     "../test/results/type_a_subset/16Aug_m_100/"
+                        "exit_time_raw_output_1&-0.55&0.3.csv"
+        }
+        entry1 = entry.copy()
+        entry1["FR"] = "50"
+        entry2 = entry.copy()
+        entry2["FR"] = "40"
+        entry3 = entry.copy()
+        entry3["FR"] = "30"
+        entries = [entry1, entry2, entry3]
 
-        # Attempts to processes the data paths (requires I/O reading)
-        paths = self.janitor.inventoryAllFilePaths()
+        # Mocking built in opening of file to isolate unit test
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            database = Database()
+            database.generateDatabase("foo", entries)
 
-        # Sorting otherwise ordering of elements which isn't
-        # significant causes the test to fail
-        databasePaths = sorted(databasePaths)
-        paths = sorted(paths)
+            # Check whether header was written
+            header = database.databaseTemplate.format(*database.dataOrder)
+            mockOpen().write.assert_any_call(header)
 
-        # Compares element by element basis
-        for i, _ in enumerate(paths):
-            self.assertEqual(paths[i], databasePaths[i])
+            # Check whether entries were written
+            for entry in entries:
+                orderedEntry = [entry[order] for order in database.dataOrder]
+                orderedEntry = database.databaseTemplate.format(*orderedEntry)
+                mockOpen().write.assert_any_call(orderedEntry)
 
 
-# A list of integration tests that need not to be ran
-class TestIntegrationExtractor(unittest.TestCase):
+############################# INTEGRATION TESTS ################################
+
+
+class TestIntegration(unittest.TestCase):
 
     def setUp(self):
         """
@@ -141,41 +292,60 @@ class TestIntegrationExtractor(unittest.TestCase):
         """
         Tests whether the .ini file can be correctly parsed.
         """
-        settingsPath = os.path.join(self.testDir, "settings", "mock_subset.ini")
+        settingsPath = os.path.join(self.testDir, "settings", "type_a_subset.ini")
         janitor = Janitor(settingsPath)
 
-        sections = ["QUERY", "QUERY_SETTINGS", "PATHS"]
+        sections = ["QUERY", "PATHS"]
         self.assertListEqual(janitor.config.sections(), sections)
         self.assertEqual(janitor.config["PATHS"]["results_dir"],
-                         "../test/results/mock_subset")
+                         "../test/results/type_a_subset")
 
-    def testPopulateMockSubsetDatabase(self):
+    def testQueryDatabase(self):
         """
-        Tests whether the subset of the mock database can populate properly.
-        """
-        settingsPath = os.path.join(self.testDir, "settings", "mock_subset.ini")
-        expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "mock_subset.txt")
-        self._assertPopulateDatabase(settingsPath, expectedDatabasePath)
-
-    def testPopulateSampleSubsetDatabase(self):
-        """
-        Tests whether the subset of the sample database can populate properly.
+        Tests whether the database entries can be queried and fetched correctly.
         """
         settingsPath = os.path.join(self.testDir, "settings",
-                                    "sample_subset.ini")
+                                    "query.ini")
         expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "sample_subset.txt")
-        self._assertPopulateDatabase(settingsPath, expectedDatabasePath)
+                                            "database", "mock_query.txt")
 
-    def testPopulateSampleProcessedDatabase(self):
+        # Queries database
+        janitor = Janitor(settingsPath)
+        janitor.queryDatabase()
+
+        # Checks whether expected and produced files match
+        queryOutputPath = janitor.config["PATHS"]["query_file"]
+        self.assertTrue(filecmp.cmp(queryOutputPath,
+                                    expectedDatabasePath,
+                                    shallow=False))
+
+    def testTidyDatabase(self):
         """
-        Tests whether the sample database can populate properly.
+        Tests whether irrelevant entries in the database can be removed.
         """
         settingsPath = os.path.join(self.testDir, "settings",
-                                    "sample_processed.ini")
+                                    "tidy.ini")
         expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "sample_processed.txt")
+                                            "database", "mock_tidy.txt")
+
+        # Sanitizes database
+        janitor = Janitor(settingsPath)
+        janitor.tidyDatabase()
+
+        # Checks whether expected and produced files match
+        queryOutputPath = janitor.config["PATHS"]["query_file"]
+        self.assertTrue(filecmp.cmp(queryOutputPath,
+                                    expectedDatabasePath,
+                                    shallow=False))
+
+    def testPopulateSampleDatabase(self):
+        """
+        Tests whether the type_a database can populate properly.
+        """
+        settingsPath = os.path.join(self.testDir, "settings",
+                                    "type_a.ini")
+        expectedDatabasePath = os.path.join(self.testDir,
+                                            "database", "type_a.txt")
         self._assertPopulateDatabase(settingsPath, expectedDatabasePath)
 
     def _assertPopulateDatabase(self, settingsPath, expectedDatabasePath):
@@ -188,12 +358,15 @@ class TestIntegrationExtractor(unittest.TestCase):
         """
         # Populates the database
         janitor = Janitor(settingsPath)
-        janitor.populateDatabase()
+        janitor.generateDatabase()
 
         # Checks whether expected and produced files match
         self.assertTrue(filecmp.cmp(janitor.config["PATHS"]["database_file"],
                                     expectedDatabasePath,
                                     shallow=False))
+
+
+################################# DEBUGGING ####################################
 
 
 # A helper class (used for debugging file comparing assertions)
@@ -241,5 +414,5 @@ def cleanDatabaseDir():
 
 
 if __name__ == '__main__':
-    #unittest.main()
-    cleanDatabaseDir()
+    unittest.main()
+    #cleanDatabaseDir()

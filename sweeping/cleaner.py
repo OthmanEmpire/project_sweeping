@@ -1,14 +1,16 @@
 """
-This script is designed to make life easier ;)
+This script is specifically designed for making management of generated data
+much easier from a specific worm (C. Elegans) simulator written in Java.
 
-Specifically, it allows easier file handling and data gathering for the worm
-simulation data. In a nutshell, it allows collection of all scattered data in
-file paths and contents and accumulates it all into a single csv file.
+In a nutshell, it collects scattered data, merged it into a single simple
+text file based database, then queries it to find a goodness of fit for
+certain parameters that can then be thrown into the java simulator.
 
 __author__ = "Othman Alikhan"
 __email__ = "sc14omsa@leeds.ac.uk"
 __date__ = "2016-08-15"
 """
+import csv
 import os
 import sys
 import time
@@ -16,96 +18,58 @@ import datetime
 import configparser
 
 
-class Janitor:
+class Extractor:
     """
-    Responsible for extracting/parsing data from files and their paths,
-    thereafter storing the extracted data in a separate file. Putting it
-    another way, this class collects scattered data and centralizes it's
-    location so that it is easier to manage.
+    Responsible for extracting data from file contents and their paths.
     """
 
-    def __init__(self, settingsPath):
+    def extractAllData(self, dataDirPath, logPath):
         """
-        A simple constructor initializing paths
+        Extracts data from all sources (i.e. file paths and their contents)
 
-        :param settingsPath: The path to the file containing all the settings.
+        :param dataDirPath: The path to the directory that hosts all the data.
+        :param logPath: The path to the log file.
+        :return: A list containing dictionaries of the data parsed for each
+        single file.
         """
-        # Reads the .ini file and initializes variables
-        self.prepareSettings(settingsPath)
+        self.initializeLogFile(logPath)
+        data = {}
+        allData = []
+        hasErrorOccurred = False     # Flag highlighting a parsing error
 
-        # Formatting variables for CSV database file
-        self.dataOrder = ["FR", "ASH", "AWA", "N", "N_OUT", "EXIT", "MULTI",
-                          "DATE", "PATH"]
-        self.databaseTemplate = len(self.dataOrder) * "{:<10}" + "\n"
-
-    def prepareSettings(self, settingsPath):
-        """
-        Reads the settings from the .ini file and initializes the settings.
-
-        :param settingsPath: The path to the file containing all the settings.
-        """
-        # Reads the .ini file
-        self.config = configparser.ConfigParser()
-        self.config.read(settingsPath)
-
-        # Initializes all paths
-        paths = self.config["PATHS"]
-        self.dataPath = paths["results_dir"]
-        self.outputPath = paths["database_file"]
-        self.errorLogPath = paths["log_file"]
-
-    def populateDatabase(self):
-        """
-        Initializes the database and then populates it with entries.
-        """
-        # Generates a new empty database file (with a header) and
-        # removes the log file if it exists
-        self.cleanDatabaseFile()
-        self.cleanLogFile()
-
-        # Loops over all valid file paths and builds the database
-        for path in self.inventoryAllFilePaths():
-
+        for path in self.listAllFilePaths(dataDirPath):
             # Extends the path from root to the data file
-            path = os.path.join(self.dataPath, path)
+            path = os.path.join(dataDirPath, path)
 
             # Attempts to extract data from file path and contents
             # otherwise stores the error in a separate error log file
             try:
-                dataFromPath = self.pickDataFromPath(path)
-                dataFromFile = self.pickDataFromFile(path)
+                dataFromPath = self.extractDataFromPath(path)
+                dataFromFile = self.extractDataFromFile(path)
             except ValueError as e:
-                with open(self.errorLogPath, "a") as errorLog:
+                with open(logPath, "a") as log:
                     stamp = datetime.datetime.fromtimestamp(time.time())
                     stamp = stamp.strftime("%m/%d %H:%M:%S")
-                    errorLog.write("{}, {}\n".format(stamp, str(e)))
+                    error = "{}, {}\n".format(stamp, str(e))
+                    log.write(error)
+                hasErrorOccurred = True
                 continue
 
             # Merging both dictionaries
             data = dataFromPath.copy()
             data.update(dataFromFile)
+            allData.append(data)
 
-            self.putDatabaseEntry(data)
+        # Warns the user if all or some data failed to be extracted
+        if hasErrorOccurred:
+            print("WARNING: Some files weren't parsed properly, check"
+                  "error logs for more details!")
+        elif not allData:
+            print("WARNING: Could not find a extract a shred of data! "
+                  "Perhaps the results directory is incorrectly specified?")
+        return allData
 
-    def putDatabaseEntry(self, entryData):
-        """
-        Writes the given entry data into the supplied database in the
-        correct format.
-
-        :param entryData: A dictionary containing the data for a single row
-        in the database.
-        """
-        # Orders the entry data
-        orderedEntry = []
-        for order in self.dataOrder:
-            orderedEntry.append(entryData[order])
-
-        # Formats the entry data nicely and writes it into the database
-        with open(self.outputPath, "a") as db:
-            entry = self.databaseTemplate.format(*orderedEntry)
-            db.write(entry)
-
-    def pickDataFromPath(self, filePath):
+    def extractDataFromPath(self, filePath):
         """
         Parses the given file path and extracts data from it which is then
         returned as a dictionary. The data parsed contains: fructose
@@ -152,7 +116,7 @@ class Janitor:
         }
         return dataExtracted
 
-    def pickDataFromFile(self, filePath):
+    def extractDataFromFile(self, filePath):
         """
         Reads the given file name, parses the contents to extract data.
         The data parsed contains: the total number of worms, the worms
@@ -190,7 +154,7 @@ class Janitor:
             if wormCount:
                 exit = str(float(wormExitedCount) / float(wormCount))
             else:
-                exit = "-"
+                exit = "0"
 
             dataExtracted = \
             {
@@ -201,21 +165,22 @@ class Janitor:
             }
             return dataExtracted
 
-    def inventoryAllFilePaths(self):
+    def listAllFilePaths(self, dataDirPath):
         """
-        Lists all the paths from the results directory to the data files.
-        Initially, lists all existing files in the results directory then
-        proceeds to filter out irrelevant ones.
+        Lists all the relevant paths from the results directory to the data
+        files. Initially, lists all existing files in the results directory
+        then proceeds to filter out irrelevant ones.
 
+        :param dataDirPath: The path to the directory that hosts all the data.
         :return: A list containing all the paths from the results directory
         to the data files.
         """
         allPaths = []
         pathList = []
-        expectedResultsDir = self.dataPath.split(os.sep)[-1]
+        expectedResultsDir = dataDirPath.split(os.sep)[-1]
 
         # Generate all the paths for all files starting from the rootPath
-        for root, dirs, files in os.walk(self.dataPath):
+        for root, dirs, files in os.walk(dataDirPath):
             for file in files:
                 pathFromRoot = os.path.join(root, file)
                 allPaths.append(pathFromRoot)
@@ -242,36 +207,153 @@ class Janitor:
 
         return pathList
 
-    #TODO: Complete query method
-    def queryDatabase(self, fr, ash, awa, ):
-        """
-
-        :param fr:
-        :param ash:
-        :param awa:
-        :return:
-        """
-
-    def cleanDatabaseFile(self):
-        """
-        Creates an empty database file with a header if it doesn't exist
-        otherwise empties the contents of the existing one and adds a header.
-        """
-        database = open(self.outputPath, "w")
-        header = self.databaseTemplate.format(*self.dataOrder)
-        database.write(header)
-        database.close()
-
-    def cleanLogFile(self):
+    def initializeLogFile(self, filePath):
         """
         Deletes the log file if it already exists.
+
+        :param filePath: The path to the log file.
         """
-        if os.path.exists(self.errorLogPath):
-            os.remove(self.errorLogPath)
+        if os.path.exists(filePath):
+            os.remove(filePath)
+
+
+class Database:
+    """
+    Responsible for managing the database. Namely for inputting entries and
+    querying.
+    """
+
+    def __init__(self):
+        """
+        A simple constructor.
+        """
+        # Initializing formatting variables for CSV database file
+        self.dataOrder = ["FR", "ASH", "AWA", "N", "N_OUT",
+                          "EXIT", "MULTI", "DATE", "PATH"]
+        self.databaseTemplate = len(self.dataOrder)*"{:<9} " + "\n"
+
+    def queryDatabase(self, databasePath, query):
+        """
+        Queries the database with the filters specified in the .ini file and
+        generates the output in a file specified in the .ini as well.
+
+        :param query: A dictionary containing the query data.
+        :param databasePath: The path to the database file.
+        :return: A list containing dictionaries which themselves contain data
+        for a single row in the database.
+        """
+        with open(databasePath, "r") as databaseFile:
+            databaseReader = csv.reader(databaseFile,
+                                        delimiter=" ",
+                                        skipinitialspace=True)
+            header = next(databaseReader)
+            totalCriteria = len(query)
+            validMatches = []
+
+            # For every line in the database, checks whether the query
+            # criteria are matched, and if so then stores the line.
+            for data in databaseReader:
+                entry = dict(zip(header, data))
+
+                # Counts the number of criteria matches
+                criteriaMatched = 0
+                for key in query.keys():
+                    if float(query[key]) == float(entry[key]):
+                        criteriaMatched += 1
+
+                # If all the criteria match then the result is stored
+                if criteriaMatched == totalCriteria:
+                    validMatches.append(entry)
+
+            # Prints a user friendly message if not matches found
+            if not validMatches:
+                print("WARNING: No match has been found for the given query!")
+
+        return validMatches
+
+    def generateDatabase(self, databasePath, entries):
+        """
+        Populates the database with entries.
+
+        :param databasePath: The path to the database file.
+        :param entries: A list containing dictionaries which themselves
+        contain data for a single row in the database.
+        """
+        self.initializeDataFile(databasePath)
+
+        for entry in entries:
+            self.addDatabaseEntry(databasePath, entry)
+
+    def addDatabaseEntry(self, databasePath, data):
+        """
+        Writes the given entry data into the supplied database in the
+        correct format.
+
+        :param data: A dictionary containing the data for a single row in
+        the database.
+        :param databasePath: The path to the database file.
+        """
+        orderedData = [data[order] for order in self.dataOrder]
+
+        # Writes the data formatted prettily into the database
+        with open(databasePath, "a") as database:
+            database.write(self.databaseTemplate.format(*orderedData))
+
+    def initializeDataFile(self, filePath):
+        """
+        Creates a new file with a header containing the data parameters.
+
+        :param filePath: The path to the database file.
+        """
+        with open(filePath, "w") as file:
+            header = self.databaseTemplate.format(*self.dataOrder)
+            file.write(header)
+
+    #TODO: Complete post filtering method that removes unintersting results
+    def tidyDatabase(self):
+        """
+        Cleans up the database by removing results that are not considered
+        interesting. Namely, it removes results that have an undefined exit
+        percentage and results where the number of worms is not a multiple of
+        100 (which implies some error has occurred in the simulation data).
+        """
+        pass
+
+
+class Controller:
+    """
+    The puppeteer that
+
+    """
+
+    def __init__(self, settingsPath):
+        """
+        A simple constructor.
+
+        :param settingsPath: The path to the .ini file containing settings.
+        """
+        # Reads the .ini file
+        self.config = configparser.ConfigParser()
+        self.config.read(settingsPath)
+
+        # Initializing variables
+        self.database = Database()
+        self.extractor = Extractor()
+
+    def run(self):
+        paths = self.config["PATHS"]
+        data = self.extractor.extractAllData(paths["results_dir"],
+                                             paths["database_log_file"])
+        self.database.generateDatabase(paths["database_file"],
+                                       data)
+
+    def noob(self):
+        # Converts the query into a dictionary with non-empty values
+        query = dict(self.config["QUERY"])
+        query = {str.upper(k): v for k, v in query.items() if v}
+
 
 
 if __name__ == '__main__':
-    # Runs the script, ensuring sufficient arguments are passed
-    dataPath = os.path.join(sys.argv[1])
-    janitor = Janitor(dataPath)
-    janitor.populateDatabase()
+    controller = Controller("settings.ini")
+    controller.run()

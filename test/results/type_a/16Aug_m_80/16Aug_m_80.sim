@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Simulation version="2.19">  
+  
+	<!-- Set stimuli here, currently only SodiumChlorideConical is supported -->
+	<!-- meanSize and sizeStd in cm, diffusioncoefficient in cm^2/sec 
+			value from Odake et al., 1990-->
+	<Assay>
+		
+<!-- night_sweep2:	"100.0*exp(-81.0*((x-0.3)^2+(y-0.5)^2)/(4.0*60.0*0.000112))+100.0*exp(-81.0*((x-0.7)^2+(y-0.5)^2)/(4.0*60.0*0.000112))" -->
+<!-- no mirror:         "100.0*(exp(-81.0*((x-0.3)^2+(y-0.5)^2)/(4.0*60.0*0.0040))+exp(-81.0*((x-0.7)^2+(y-0.5)^2)/(4.0*60.0*0.0040)))" -->
+<!-- 2_c                stimulusFunction="100.0*(exp(-1/0.06048*((x-0.2)^2+(y-0.5)^2))+exp(-1/0.06048*((x-0.8)^2+(y-0.5)^2)))" -->
+		<Stimulus name="diacetyl" 
+		type="SodiumChlorideConical" 
+		setting="custom"
+                stimulusFunction="100.0*(exp(-1/0.06048*((x-0.2)^2+(y-0.5)^2))+exp(-1/0.06048*((x-0.8)^2+(y-0.5)^2)))" 
+         /> 
+         
+<!-- night_sweep2:        "100.0*(1.0/(300+t)^0.5)*exp(-81.0*(((x-0.5)^2+(y-0.5)^2)^0.5-0.5/9.0)^2/(4.0*(300.0+t)*0.000001))"	-->
+		<Stimulus name="fructose" 
+		type="SodiumChlorideConical" 
+		setting="custom"
+                stimulusFunction="80.0*(300.0/(300.0+t))^0.5*exp(-25.0*(((x-0.5)^2+(y-0.5)^2)^0.5-0.1)^2/(0.00012*(300.0+t)))"
+         /> 
+         
+         
+	</Assay>
+	
+	<Neuropeptides>
+	   <Neuropeptide name="tyramine" baseConcentration="0" rate="0.001" />
+	   <Neuropeptide name="PDF" baseConcentration="0" rate="0.01" /> 
+	</Neuropeptides>
+	
+	<!-- define your output metrics here, multiple metrics can be added
+		Examples are chemotaxisIndexAMieptor.nB, Iino, jansen_ci -->
+	<Outputs>
+		<!-- here A is the chemical spot and B the control spot -->
+		<!-- dimensions in cm 					-->
+		
+		<Output name="in_spot" type="SimpleChemotaxisCircle"
+		A.x="2.5" A.y="2.5" ARadius="0.5" />
+
+		<Output name="exit_time" type="TimePointCrossingCircle"
+		A.x="2.5" A.y="2.5" ARadius="0.5" stopAtExit="true" />
+
+		<!-- <Output name="neurons" type="NeuronalPropertiesOverTime" writeInterval="0.01" />
+
+		<Output name="position" type="PositionOverTime" writeInterval="0.01" /> -->
+		
+
+		 
+	</Outputs>
+	
+  
+	<!-- Define the circuit here. The following are possible: SensoryNeuron, NewAdaptiveSensoryNeuron, IntegratingReboundNeuron, MotorNeuron,
+		StaticNeuron, Pirouette, ReversalComponent, and chemical or electric connections-->
+	<Circuit typeString="Simulation of the Hukema (2006) quadrant assay - no pre-conditioning">
+		<Neurons>			
+			
+			<Neuron name="AWA" useSigmoid="true" type="NewAdaptiveSensoryNeuron" 
+			defaultValue="0" cutOffNegative="false" cutOffPositive="false" 
+			sensing="diacetyl" outputStrength="1" initialConcentration="0"
+			useLog="false" logMinimumResolution="1" logLink="100"		
+			slow_in_log="false" 		
+			k_a_decay="15" k_a="4" k_i="2" inputMultiplier="1" />
+			
+			<Neuron name="ASH" useSigmoid="true" type="NewAdaptiveSensoryNeuron" 
+			defaultValue="0" cutOffNegative="false" cutOffPositive="false" 
+			sensing="fructose" outputStrength="1" initialConcentration="0"
+			k_a_decay="15" k_a="4" k_i="2" inputMultiplier="1"
+			useLog="false" logMinimumResolution="1" logLink="100">
+		        <NeuropeptideReceptor peptide="tyramine" receptorFunction="k_a=4+c" /> 
+			</Neuron>
+			
+			<Neuron name="RIM" useSigmoid="true" type="Neuron" defaultValue="0" >
+                <!--<NeuropeptideReceptor peptide="PDF" receptorFunction="0.5*c" />-->
+<!-- tyra-2: comment out next line. WT: uncomment out next line -->
+<!--			<NeuropeptideRelease peptide="tyramine" releaseFunction="120*(V-0.02)" /> -->
+<!--		<NeuropeptideRelease peptide="tyramine" releaseFunction="100*(V-0.1)" />	-->
+
+                <NeuropeptideRelease peptide="PDF" releaseFunction="V" />
+			</Neuron>
+			
+			<Neuron name="BiasA" useSigmoid="true" type="Neuron" defaultValue="0" />
+			<Neuron name="BiasB" useSigmoid="true" type="Neuron" defaultValue="0" />
+
+			<Neuron name="AVB" useSigmoid="true" type="Neuron" defaultValue="0" />		
+			<Neuron name="AIB" useSigmoid="true" type="Neuron" defaultValue="0" />
+			
+			<Neuron name="DMN" type="MotorNeuron" defaultValue="0" initiallyOff="true" useSigmoid="true" />
+			<Neuron name="VMN" type="MotorNeuron" defaultValue="0" initiallyOff="true" useSigmoid="true" />
+			
+			<Neuron name="Pir" type="Pirouette" />
+			
+		</Neurons>
+		<!-- Define connections here -->
+		<Connections>
+			
+			
+			<Connection from="AVB" to="BiasA" type="chemical" weight="1" />		
+			<Connection from="AVB" to="BiasB" type="chemical" weight="-1" />	
+			
+			<Connection from="BiasA" to="BiasA" type="chemical"  weight="-0.25" />
+			<Connection from="BiasB" to="BiasB" type="chemical"  weight="-0.25" />
+			
+			<Connection name="awa_to_rim" from="AWA" to="RIM" type="chemical" weight="-0.7" />			
+  			<Connection name="ash_to_rim" from="ASH" to="RIM" type="chemical" weight="1.1" />	
+  			            			
+			<Connection from="RIM" to="AIB" type="chemical" weight="1" />	
+			<Connection from="RIM" to="BiasA" type="chemical" weight="-0.5" />
+			<Connection from="RIM" to="BiasB" type="chemical" weight="-0.5" />	
+			
+			<Connection from="BiasA" to="BiasB" type="chemical" allowNegativeSynapticFlow="true" weight="-1.4" />
+			<Connection from="BiasB" to="BiasA" type="chemical" allowNegativeSynapticFlow="true" weight="-1.4" />
+
+			<Connection from="VMN" to="BiasA" allowNegativeSynapticFlow="false" type="chemical" weight="0.88" />
+			<Connection from="DMN" to="BiasB" allowNegativeSynapticFlow="false" type="chemical" weight="0.88" />
+			
+			<Connection from="BiasA" to="DMN"  type="chemical" weight="0.88" />
+			<Connection from="BiasB" to="VMN"  type="chemical" weight="0.88" />
+
+			<Connection from="AIB" to="Pir" type="chemical" weight="1" />
+			
+		</Connections>
+	</Circuit>
+	
+	  
+	<!-- General simulation settings (including the assay definition) -->
+	<Settings type="general">	
+	   
+		<!--  The save path for the simulation results, and the project name -->
+		<Setting name="savePath" value="./results/16Aug_m_80" />
+		<Setting name="projectName" value="16Aug_m_80" />
+
+		<!-- The simulation time per run in seconds, integration time step, and
+			whether to save the position of the worm over time (for the Trace tab 
+			in the simulation program). Only set useTraces to true for 
+			numberOfSimulation < 5 
+			--> 
+		<Setting name="endTime" value="900" />	    
+		<Setting name="stepSize" value="0.0001" />	
+		<Setting name="useTraces" value="false" />  
+		<Setting name="wormCannotLeaveArena" value="false" />  
+		
+		<Setting name="environmentSize" value="5" />  
+		<Setting name="squareEnvironment" value="false" />
+		<Setting name="environmentWidth" value="5" />
+		<Setting name="environmentHeight" value="5" />
+		
+    	<Setting name="endSimulationAtPlateEdge" value="false" />
+
+    	<Setting name="zoomFactor" value="2" />
+    		
+
+		<!-- Number of worms -->
+		<Setting name="numberOfSimulations" value="100" />
+			
+		 <!-- general neuron parameters, used for all neurons, 
+			but can be overriden by each neuron in Circuit definition above -->
+		<Setting name="allowNegativeSynapticFlow" value="true" />
+		<Setting name="useSigmoid" value="true" />
+		<Setting name="isSymmetricSigmoid" value="true" />
+		<!-- The timescale of every neuron (except NewDerivativeNeurons, and
+			abstract components such as Pirouettes. 
+			set to 100 for instantanious neurons, 
+			set to 1 or lower to give the neurons 
+			their own timescale (in units 1 over time (s))  -->
+		<Setting name="membranePotentialDepressionRate" value="3" />
+			
+		<!-- enable/disable navigation mechanisms, 
+			do not disable steering here, set connection strength to steering circuit to 0 instead! -->
+		<Setting name="usePirouettes" value="true" />
+		<Setting name="useSteering" value="true" />
+			
+		<!-- When true, muscles use a sigmoid, when false, muscles are linear -->
+		<Setting name="useLockerySteering" value="false" />
+			
+		<!-- Control noise in the muscles of the worm -->
+		<Setting name="addRandomSteeringNoise" value="false" />
+		<Setting name="randomSteeringNoiseSD" value="10" />
+		<Setting name="muscleNoiseTimeConstant" value="0.001" />
+
+		<!-- Set to false if worm is glued to position -->
+		<Setting name="updatePosition" value="true" />
+		<!-- The Speed of the worm in cm/s, only used when updatePosition is true -->
+		<Setting name="speed" value="0.011" />		
+				
+		<!-- Initial position of every worm -->
+    	<Setting name="useRandomInitialPosition" value="false" />
+		<Setting name="initialPositionX" value="0.5" />
+		<Setting name="initialPositionY" value="0.5" />
+
+		<!-- Initial orientation of the worm, when set to random value is discarded -->
+		<Setting name="useRandomInitialBearing" value="true" />
+		<Setting name="initialDirection" value="-0.8" />
+			
+		<!-- Motor output settings--> 
+		<Setting name="oscillationStrength" value="0" />
+		<Setting name="oscillationPeriod" value="4.2" />
+		<Setting name="muscleFactor" value="1" />
+				
+		<!-- Pirouette parameters -->
+		<Setting name="basicPirouetteRate" value="0.035" />	
+		<Setting name="maximumPirouetteRateChange" value="0.035" />
+		<Setting name="pirouetteRateOfChange" value="1" />
+		<Setting name="activityToMolarity" value="1" />
+		<!-- duration of a pirouette in seconds -->
+		<Setting name="pirouetteDuration" value="0" />	
+			
+		<!-- U-turn parameters -->
+		<Setting name="reversalGaussianStd" value="0.05" />
+		  
+		<!-- OUTPUT SETTINGS FOLLOWING FROM HERE -->
+		   
+		<!-- If turned on the space density of worms per unit area will be calculated -->
+		<Setting name="saveAccumulationData" value="false" />
+		<!-- Snapshots allow the viewing of density over time, interval in seconds  -->
+		<Setting name="accumulationDataSnapshots" value="false" />
+		<Setting name="accumulationDataSnapshotInterval" value="600" />	
+		<!-- The number of squares per dimension to divide the arena -->
+		<Setting name="accumulationDataGridNumber" value="250" />
+		<!-- The timestep for which to check the position of the worm in seconds -->
+		<Setting name="accumulationDataIntegrationTime" value="1" />
+			
+		<!-- Turn on to save the current concentration field
+			Make sure saveAccumulationData is turned on as well! -->
+		<Setting name="saveChemicalField" value="false" />	
+		<Setting name="saveChemicalFieldName" value="diacetyl" /> 
+
+		
+
+		<!-- The outputFilename will be added after the neuron name:
+			for instance AWA_output  (the extension will be added automatically) -->
+		<Setting name="outputFilename" value="_output" />
+		<!--  Setting outputForMatlab to true, will remove the header 
+			and use a space between the time and data column-->
+		<Setting name="outputForMatlab" value="false" />
+
+		<!-- Settings for how to save neuron activation traces (used in the neuron
+			trace tab in the simulation program.
+			The plotResolution parameter determines the datapoints skipped per 
+			point in the plot. A value of 1 gives the highest resolution a 
+			value of 100 a low resolution. -->
+		<Setting name="disableNeuronReaders" value="true" />
+		<Setting name="plotResolution" value="1" />
+		<Setting name="timeResultResolution" value="0.1" />		
+		<!-- turn on useManualPlotScaling to set the axis regions manually. -->
+		<Setting name="useManualPlotScaling" value="true" />	
+		<Setting name="plotMinX" value="-50" />
+		<Setting name="plotMaxX" value="900" />
+		<Setting name="plotMinY" value="-1" />
+		<Setting name="plotMaxY" value="1" />
+			
+		<!-- When true, stores the position of a worms over time -->
+		<Setting name="saveRawPosition" value="false" />
+			
+		<!-- The number of timesteps per point of the worm trace (position) 
+			Set to 1 for highest resolution, 100 for low resolution
+			20 or lower recommended-->
+		<Setting name="numberOfStepsPerRepaint" value="40" />
+			
+			
+		<!-- Additional settings can be found in the settings tab of the program.
+			All settings listed there can be set here as well, by adding a new 
+			Setting tag: <Setting name="..." value="..." /> -->	
+	</Settings>
+	
+		
+	<!-- If you want to be able to dynamically set parts of a circuit, create super dynamic settings here.-->
+	<SuperDynamicSettings>
+		<Setting name="nacl" path="fructose" type="STIMULUS_STRENGTH" />		
+		<Setting name="rim_default" path="RIM" type="DEFAULT_VALUE" />	
+		<Setting name="avb_default" path="AVB" type="DEFAULT_VALUE" />	
+		<Setting name="k_slow" path="ASEL" type="K_SLOW" />	
+		<Setting name="k_slow_decay" path="ASEL" type="K_SLOW_DECAY" />	
+		<Setting name="asel_log_res" path="ASEL" type="LOG_MINIMUM_RESOLUTION" />
+		<Setting name="aser_log_res" path="ASER" type="LOG_MINIMUM_RESOLUTION" />
+		<Setting name="log_res" path="asel_log_res::aser_log_res" type="SUPER_COMBO" />
+		
+		<Setting name="number_of_salt_spots" path="nacl::numPoints" type="STIMULUS_PARAMETER" />
+		<Setting name="ash_to_rim" path="ash_to_rim" type="SYNAPTIC_WEIGHT" />
+		<Setting name="awa_to_rim" path="awa_to_rim" type="SYNAPTIC_WEIGHT" />
+
+		<Setting name="multisensory" path="AWA" type="K_A" />
+		<Setting name="test" path="ASH" type="K_A" />
+	</SuperDynamicSettings> 
+	
+		
+	<Inputs>   
+	<!-- Set here how a setting should change during a simulation
+		Every setting as well as super dynamic settings (defined in the top 
+		of this file) can be added here. 
+		. -->
+		<Setting name="avb_default" time="0" newValue="0.5" />
+		<Setting name="avb_default" time="0.5" newValue="0" />
+		
+		<!--
+		<Setting name="nacl" time="10" newValue="100" />
+		<Setting name="nacl" time="610" newValue="0" />
+		<Setting name="nacl" time="730" newValue="100" />
+		<Setting name="nacl" time="733" newValue="0" />
+		-->
+	</Inputs> 
+	   
+	  	  
+	<!-- To do a parameter sweep, define it here (multi-dimensional sweeps are allowed). -->
+	<MultiSimulation>
+		
+		<!-- <Parameter name="rim_default" from="0" to="-0.08" by="-0.001" /> -->
+		<!-- <Parameter name="stepSize" list="0.01,0.005" /> -->
+		<!-- <Parameter name="stepSize" list="0.0005" /> -->
+		<!-- <Parameter name="stepSize" list="0.04,0.02,0.01,0.005,0.0025,0.00125,0.000625,0.0003125,0.00015625,0.000078125,0.0000390625,0.00001953125,0.000009765625,0.0000048828125,0.00000244140625,0.000001220703125,0.0000006103515625,0.00000030517578125,0.000000152587890625,0.0000000762939453125" /> -->
+		
+		<Parameter name="multisensory" list="1"  />
+<!--		<Parameter name="multisensory" list="0,1"  />	-->
+		<!-- <Parameter name="test" from="4" to="8.1" by="2"  /> -->
+<!--		<Parameter name="awa_to_rim" from="-0.4" to="-1" by="-0.1" />	-->
+                <Parameter name="awa_to_rim" list="-0.6,-0.7,-0.8,-0.9,-1.0" />
+                <Parameter name="ash_to_rim" list="0.34,0.35,0.36,0.4,0.45,0.5" />
+<!-- 		<Parameter name="ash_to_rim" from="0.5" to="1.51" by="0.1" />   -->
+
+	</MultiSimulation>
+	   
+	  
+	<!-- Time callers are used to get time dependent output -->
+	<TimeCallers>
+		<!--  <TimeCaller neuron="Pir" type="NeuronHistogram" numberOfBins="30" timeInterval="1" beginTime="0" endTime="5400" />
+		<TimeCaller neuron="Rev" type="NeuronHistogram" numberOfBins="30" timeInterval="1" beginTime="0" endTime="5400" />		
+		<TimeCaller neuron="AWA" type="NeuronHistogram" numberOfBins="30" timeInterval="1" beginTime="0" endTime="5400" />
+		<TimeCaller neuron="ASH" type="NeuronHistogram" numberOfBins="30" timeInterval="1" beginTime="0" endTime="5400" />-->
+	</TimeCallers>
+	   
+	   
+	<!-- Set a seed, and corresponding number of threads here 
+		(from seeds_project.txt), to control randomness of the simulation.
+		When the line below is uncommented, the simulation becomes fully deterministic -->		
+	<!-- <Random seed="1469469891318" numThread="8" /> -->
+</Simulation>
+
