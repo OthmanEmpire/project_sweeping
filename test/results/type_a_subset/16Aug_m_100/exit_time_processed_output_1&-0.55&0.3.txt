@@ -1,1 +1,0 @@
-The average time of exit and std is NaN,NaN

@@ -9,7 +9,7 @@ import filecmp
 import os
 import unittest
 import mock
-from sweeping.cleaner import Extractor, Database
+from sweeping.cleaner import Extractor, Database, Controller
 
 
 ################################# UNIT TESTS ###################################
@@ -194,7 +194,7 @@ class TestDatabase(unittest.TestCase):
         # Mocking built in opening of file to isolate unit test
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
-            self.database.addDatabaseEntry("foo", entryData)
+            self.database.addEntry("foo", entryData)
 
             # Asserts whether written data matches expected
             mockOpen().write.assert_called_once_with(expectedEntry)
@@ -229,7 +229,7 @@ class TestDatabase(unittest.TestCase):
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
             database = Database()
-            match = database.queryDatabase("foo", query)[0]
+            match = database.query("foo", query)[0]
             self.assertDictEqual(match, entry)
 
     @mock.patch("os.path")
@@ -264,7 +264,7 @@ class TestDatabase(unittest.TestCase):
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
             database = Database()
-            database.generateDatabase("foo", entries)
+            database.generate("foo", entries)
 
             # Check whether header was written
             header = database.databaseTemplate.format(*database.dataOrder)
@@ -286,83 +286,60 @@ class TestIntegration(unittest.TestCase):
         """
         Runs this method before every test which initializes some variables.
         """
-        self.testDir = os.path.join("..", "test")
+        self.databaseDir = os.path.join("..", "test", "database")
+        self.resultsDir = os.path.join("..", "test", "results")
+        settingsPath = os.path.join(".", "settings.ini")
 
-    def testPrepareSettings(self):
+        self.controller = Controller(settingsPath)
+
+    def testReadIniFile(self):
         """
         Tests whether the .ini file can be correctly parsed.
         """
-        settingsPath = os.path.join(self.testDir, "settings", "type_a_subset.ini")
-        janitor = Janitor(settingsPath)
+        self.assertListEqual(self.controller.config.sections(), ["PATHS"])
 
-        sections = ["QUERY", "PATHS"]
-        self.assertListEqual(janitor.config.sections(), sections)
-        self.assertEqual(janitor.config["PATHS"]["results_dir"],
-                         "../test/results/type_a_subset")
+    def testGenerateDatabaseTypeA(self):
+        """
+        Tests whether the type_a database can populate properly.
+        """
+        expectedDatabase = os.path.join(self.databaseDir, "type_a.txt")
+        producedDatabase = os.path.join(self.databaseDir, "type_a_output.txt")
+        log = os.path.join(self.databaseDir, "type_a_error_log.txt")
+        results = os.path.join(self.resultsDir, "type_a")
 
-    def testQueryDatabase(self):
+        self.controller.config["PATHS"]["results_dir"] = results
+        self.controller.config["PATHS"]["database_file"] = producedDatabase
+        self.controller.config["PATHS"]["database_log_file"] = log
+        self.controller.run()
+
+        self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
+                                    shallow=False))
+
+    def testQueryDatabaseTypeA(self):
         """
         Tests whether the database entries can be queried and fetched correctly.
         """
-        settingsPath = os.path.join(self.testDir, "settings",
-                                    "query.ini")
-        expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "mock_query.txt")
+        database = os.path.join(self.databaseDir, "mock.txt")
+        self.controller.config["PATHS"]["database_file"] = database
 
-        # Queries database
-        janitor = Janitor(settingsPath)
-        janitor.queryDatabase()
+        matches = self.controller.database.query(database, {"FR": 100, "AWA": -1.7})
 
-        # Checks whether expected and produced files match
-        queryOutputPath = janitor.config["PATHS"]["query_file"]
-        self.assertTrue(filecmp.cmp(queryOutputPath,
-                                    expectedDatabasePath,
-                                    shallow=False))
+        self.assertTrue(len(matches) == 5)
 
     def testTidyDatabase(self):
         """
         Tests whether irrelevant entries in the database can be removed.
         """
-        settingsPath = os.path.join(self.testDir, "settings",
-                                    "tidy.ini")
-        expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "mock_tidy.txt")
+        readDatabase = os.path.join(self.databaseDir, "mock")
+        expectedDatabase = os.path.join(self.databaseDir, "mock_tidy.txt")
+        producedDatabase = os.path.join(self.databaseDir, "mock_tidy_output.txt")
+        log = os.path.join(self.databaseDir, "mock_tidy_error_log.txt")
 
-        # Sanitizes database
-        janitor = Janitor(settingsPath)
-        janitor.tidyDatabase()
+        self.controller.config["PATHS"]["database_file"] = producedDatabase
+        self.controller.config["PATHS"]["database_log_file"] = log
+        self.controller.database.tidy(readDatabase)
 
-        # Checks whether expected and produced files match
-        queryOutputPath = janitor.config["PATHS"]["query_file"]
-        self.assertTrue(filecmp.cmp(queryOutputPath,
-                                    expectedDatabasePath,
-                                    shallow=False))
-
-    def testPopulateSampleDatabase(self):
-        """
-        Tests whether the type_a database can populate properly.
-        """
-        settingsPath = os.path.join(self.testDir, "settings",
-                                    "type_a.ini")
-        expectedDatabasePath = os.path.join(self.testDir,
-                                            "database", "type_a.txt")
-        self._assertPopulateDatabase(settingsPath, expectedDatabasePath)
-
-    def _assertPopulateDatabase(self, settingsPath, expectedDatabasePath):
-        """
-        Populates the database and then proceeds to assert whether the output
-        matches the expected results.
-
-        :param settingsPath: The path to the settings .ini file.
-        :param expectedDatabasePath: The path to the expected database.
-        """
-        # Populates the database
-        janitor = Janitor(settingsPath)
-        janitor.generateDatabase()
-
-        # Checks whether expected and produced files match
-        self.assertTrue(filecmp.cmp(janitor.config["PATHS"]["database_file"],
-                                    expectedDatabasePath,
+        self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
                                     shallow=False))
 
 

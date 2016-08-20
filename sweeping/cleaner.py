@@ -232,7 +232,8 @@ class Database:
                           "EXIT", "MULTI", "DATE", "PATH"]
         self.databaseTemplate = len(self.dataOrder)*"{:<9} " + "\n"
 
-    def queryDatabase(self, databasePath, query):
+    #TODO: Perhaps query should return the no matches found message instead?
+    def query(self, databasePath, query):
         """
         Queries the database with the filters specified in the .ini file and
         generates the output in a file specified in the .ini as well.
@@ -271,7 +272,7 @@ class Database:
 
         return validMatches
 
-    def generateDatabase(self, databasePath, entries):
+    def generate(self, databasePath, entries):
         """
         Populates the database with entries.
 
@@ -282,9 +283,9 @@ class Database:
         self.initializeDataFile(databasePath)
 
         for entry in entries:
-            self.addDatabaseEntry(databasePath, entry)
+            self.addEntry(databasePath, entry)
 
-    def addDatabaseEntry(self, databasePath, data):
+    def addEntry(self, databasePath, data):
         """
         Writes the given entry data into the supplied database in the
         correct format.
@@ -309,8 +310,8 @@ class Database:
             header = self.databaseTemplate.format(*self.dataOrder)
             file.write(header)
 
-    #TODO: Complete post filtering method that removes unintersting results
-    def tidyDatabase(self):
+    #TODO: Complete post filtering method that removes uninteresting results
+    def tidy(self, databasePath):
         """
         Cleans up the database by removing results that are not considered
         interesting. Namely, it removes results that have an undefined exit
@@ -344,8 +345,8 @@ class Controller:
         paths = self.config["PATHS"]
         data = self.extractor.extractAllData(paths["results_dir"],
                                              paths["database_log_file"])
-        self.database.generateDatabase(paths["database_file"],
-                                       data)
+        self.database.generate(paths["database_file"],
+                               data)
 
     def noob(self):
         # Converts the query into a dictionary with non-empty values

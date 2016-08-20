@@ -1,1 +1,0 @@
-The chemotaxis index is 0.03
