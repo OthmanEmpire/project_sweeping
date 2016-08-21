@@ -16,6 +16,7 @@ import sys
 import time
 import datetime
 import configparser
+from operator import itemgetter
 
 
 class Extractor:
@@ -32,20 +33,20 @@ class Extractor:
         :return: A list containing dictionaries of the data parsed for each
         single file.
         """
-        self.initializeLogFile(logPath)
+        self._initializeLogFile(logPath)
         data = {}
         allData = []
         hasErrorOccurred = False     # Flag highlighting a parsing error
 
-        for path in self.listAllFilePaths(dataDirPath):
+        for path in self._listAllFilePaths(dataDirPath):
             # Extends the path from root to the data file
             path = os.path.join(dataDirPath, path)
 
             # Attempts to extract data from file path and contents
             # otherwise stores the error in a separate error log file
             try:
-                dataFromPath = self.extractDataFromPath(path)
-                dataFromFile = self.extractDataFromFile(path)
+                dataFromPath = self._extractDataFromPath(path)
+                dataFromFile = self._extractDataFromFile(path)
             except ValueError as e:
                 with open(logPath, "a") as log:
                     stamp = datetime.datetime.fromtimestamp(time.time())
@@ -69,7 +70,7 @@ class Extractor:
                   "Perhaps the results directory is incorrectly specified?")
         return allData
 
-    def extractDataFromPath(self, filePath):
+    def _extractDataFromPath(self, filePath):
         """
         Parses the given file path and extracts data from it which is then
         returned as a dictionary. The data parsed contains: fructose
@@ -116,7 +117,7 @@ class Extractor:
         }
         return dataExtracted
 
-    def extractDataFromFile(self, filePath):
+    def _extractDataFromFile(self, filePath):
         """
         Reads the given file name, parses the contents to extract data.
         The data parsed contains: the total number of worms, the worms
@@ -138,7 +139,7 @@ class Extractor:
                 if not entry.strip():
                     continue
 
-                # Attempts to extract data for each entry
+                # Attempts to extract data for each entry1
                 try:
                     wormNum, timeExited = entry.rstrip().split(",")
                 except ValueError as e:
@@ -165,7 +166,7 @@ class Extractor:
             }
             return dataExtracted
 
-    def listAllFilePaths(self, dataDirPath):
+    def _listAllFilePaths(self, dataDirPath):
         """
         Lists all the relevant paths from the results directory to the data
         files. Initially, lists all existing files in the results directory
@@ -207,7 +208,7 @@ class Extractor:
 
         return pathList
 
-    def initializeLogFile(self, filePath):
+    def _initializeLogFile(self, filePath):
         """
         Deletes the log file if it already exists.
 
@@ -230,47 +231,27 @@ class Database:
         # Initializing formatting variables for CSV database file
         self.dataOrder = ["FR", "ASH", "AWA", "N", "N_OUT",
                           "EXIT", "MULTI", "DATE", "PATH"]
-        self.databaseTemplate = len(self.dataOrder)*"{:<9} " + "\n"
+        self.template = len(self.dataOrder)*"{:<9} " + "\n"
 
-    #TODO: Perhaps query should return the no matches found message instead?
-    def query(self, databasePath, query):
+    def read(self, databasePath):
         """
-        Queries the database with the filters specified in the .ini file and
-        generates the output in a file specified in the .ini as well.
+        Reads the the given database.
 
-        :param query: A dictionary containing the query data.
         :param databasePath: The path to the database file.
-        :return: A list containing dictionaries which themselves contain data
-        for a single row in the database.
+        :return: A list containing the database entries as dictionaries.
         """
-        with open(databasePath, "r") as databaseFile:
-            databaseReader = csv.reader(databaseFile,
-                                        delimiter=" ",
-                                        skipinitialspace=True)
-            header = next(databaseReader)
-            totalCriteria = len(query)
-            validMatches = []
+        allEntries = []
 
-            # For every line in the database, checks whether the query
-            # criteria are matched, and if so then stores the line.
-            for data in databaseReader:
-                entry = dict(zip(header, data))
+        with open(databasePath, "r") as database:
+            database = csv.reader(database,
+                                  delimiter=" ",
+                                  skipinitialspace=True)
+            header = next(database)
 
-                # Counts the number of criteria matches
-                criteriaMatched = 0
-                for key in query.keys():
-                    if float(query[key]) == float(entry[key]):
-                        criteriaMatched += 1
+            for data in database:
+                allEntries.append(dict(zip(header, data)))
 
-                # If all the criteria match then the result is stored
-                if criteriaMatched == totalCriteria:
-                    validMatches.append(entry)
-
-            # Prints a user friendly message if not matches found
-            if not validMatches:
-                print("WARNING: No match has been found for the given query!")
-
-        return validMatches
+        return allEntries
 
     def generate(self, databasePath, entries):
         """
@@ -280,14 +261,76 @@ class Database:
         :param entries: A list containing dictionaries which themselves
         contain data for a single row in the database.
         """
-        self.initializeDataFile(databasePath)
+        self._initializeDataFile(databasePath)
 
         for entry in entries:
-            self.addEntry(databasePath, entry)
+            self._writeEntry(databasePath, entry)
 
-    def addEntry(self, databasePath, data):
+    def query(self, database, query):
         """
-        Writes the given entry data into the supplied database in the
+        Queries the database with the filters specified in the .ini file and
+        generates the output in a file specified in the .ini as well.
+
+        :param database: A list containing database entries as dictionaries.
+        :param query: A dictionary containing the query data.
+        :return: A list containing dictionaries which themselves contain data
+        for a single row in the database.
+        """
+        totalCriteria = len(query)
+        validMatches = []
+
+        # For every entry1 in the database, checks whether the query
+        # criteria are matched, and if so then stores the line.
+        for entry in database:
+
+            # Counts the number of criteria matches
+            criteriaMatched = 0
+            for key in query.keys():
+                if float(query[key]) == float(entry[key]):
+                    criteriaMatched += 1
+
+            # If all the criteria match then the result is stored
+            if criteriaMatched == totalCriteria:
+                validMatches.append(entry)
+
+        return validMatches
+
+    def sort(self, database):
+        """
+        Sorts the database in ascending number based on the fructose
+        concentration followed by the ASH value.
+
+        :param database: A list containing database entries as dictionaries.
+        :return: A list containing the sorted database entries as dictionaries.
+        """
+        sortedDatabase = sorted(database, key=lambda k: (float(k["FR"]),
+                                                         float(k["ASH"])))
+        return sortedDatabase
+
+    def sanitize(self, database):
+        """
+        Sanitizes the database by removing results that are not considered
+        interesting.
+
+        Namely, it removes results where the number of worms is zero or not a
+        multiple of 100 (implying an error in the data itself).
+
+        :param database: A list containing database entries as dictionaries.
+        :return: A list containing the sanitized database entries as
+        dictionaries.
+        """
+        sanitizedEntries = []
+
+        for i, entry in enumerate(database):
+            worms = int(entry["N"])
+            if worms != 0 and worms % 100 == 0:
+                sanitizedEntries.append(entry)
+
+        return sanitizedEntries
+
+    def _writeEntry(self, databasePath, data):
+        """
+        Writes the given entry1 data into the supplied database in the
         correct format.
 
         :param data: A dictionary containing the data for a single row in
@@ -298,27 +341,17 @@ class Database:
 
         # Writes the data formatted prettily into the database
         with open(databasePath, "a") as database:
-            database.write(self.databaseTemplate.format(*orderedData))
+            database.write(self.template.format(*orderedData))
 
-    def initializeDataFile(self, filePath):
+    def _initializeDataFile(self, filePath):
         """
         Creates a new file with a header containing the data parameters.
 
         :param filePath: The path to the database file.
         """
         with open(filePath, "w") as file:
-            header = self.databaseTemplate.format(*self.dataOrder)
+            header = self.template.format(*self.dataOrder)
             file.write(header)
-
-    #TODO: Complete post filtering method that removes uninteresting results
-    def tidy(self, databasePath):
-        """
-        Cleans up the database by removing results that are not considered
-        interesting. Namely, it removes results that have an undefined exit
-        percentage and results where the number of worms is not a multiple of
-        100 (which implies some error has occurred in the simulation data).
-        """
-        pass
 
 
 class Controller:
@@ -347,12 +380,6 @@ class Controller:
                                              paths["database_log_file"])
         self.database.generate(paths["database_file"],
                                data)
-
-    def noob(self):
-        # Converts the query into a dictionary with non-empty values
-        query = dict(self.config["QUERY"])
-        query = {str.upper(k): v for k, v in query.items() if v}
-
 
 
 if __name__ == '__main__':

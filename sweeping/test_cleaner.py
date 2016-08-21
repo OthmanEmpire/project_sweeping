@@ -21,21 +21,15 @@ class TestExtractor(unittest.TestCase):
     """
 
     def setUp(self):
-        """
-        Constructs an Extractor instance before running any test.
-        """
         self.dataPath = os.path.join("..", "test", "results", "type_a")
         self.extractor = Extractor()
 
     @mock.patch("sweeping.cleaner.print", create=True)
-    @mock.patch("sweeping.cleaner.Extractor.listAllFilePaths")
-    @mock.patch("sweeping.cleaner.Extractor.extractDataFromPath")
-    @mock.patch("sweeping.cleaner.Extractor.extractDataFromFile")
+    @mock.patch("sweeping.cleaner.Extractor._listAllFilePaths")
+    @mock.patch("sweeping.cleaner.Extractor._extractDataFromPath")
+    @mock.patch("sweeping.cleaner.Extractor._extractDataFromFile")
     def testExtractAllData(self, mockfileExtract, mockPathExtract,
                            mockList, mockPrint):
-        """
-        Tests whether all required data can be extracted properly.
-        """
         error1 = 'WARNING: Could not find a extract a shred of data! ' \
                  'Perhaps the results directory is incorrectly specified?'
         error2 = 'WARNING: Some files weren\'t parsed properly, check' \
@@ -64,11 +58,7 @@ class TestExtractor(unittest.TestCase):
         data = self.extractor.extractAllData("foo", "bar")[0]
         self.assertDictEqual(data, {"FR": "50", "N": "100"})
 
-    def testExtractDataFromPath(self):
-        """
-        Tests whether the data extracted from the paths to the data files
-        is parsed correctly from the paths themselves.
-        """
+    def test_ExtractDataFromPath(self):
         filePath = os.path.join("12Aug_m_50",
                                 "exit_time_raw_output_1&-2.2&0.32.csv")
         data = \
@@ -81,14 +71,10 @@ class TestExtractor(unittest.TestCase):
             "DATE":     "12Aug"
         }
 
-        dataExtracted = self.extractor.extractDataFromPath(filePath)
+        dataExtracted = self.extractor._extractDataFromPath(filePath)
         self.assertDictEqual(dataExtracted, data)
 
-    def testExtractDataFromFile(self):
-        """
-        Tests whether data extracted from the contents of a data file is
-        done correctly.
-        """
+    def test_ExtractDataFromFile(self):
         filePath = os.path.join("..", "test", "results",
                                 "exit_time_raw_output_0&-2.25&0.27.csv")
         data = \
@@ -99,14 +85,10 @@ class TestExtractor(unittest.TestCase):
             "PATH":     filePath
         }
 
-        dataExtracted = self.extractor.extractDataFromFile(filePath)
+        dataExtracted = self.extractor._extractDataFromFile(filePath)
         self.assertDictEqual(dataExtracted, data)
 
-    def testListAllFilePaths(self):
-        """
-        Tests whether all data file paths from the results folder are listed
-        as expected.
-        """
+    def test_ListAllFilePaths(self):
         allPathsFile = os.path.join("..", "test", "results",
                                     "type_a_path_list.txt")
 
@@ -120,7 +102,7 @@ class TestExtractor(unittest.TestCase):
                 databasePaths.append(path)
 
         # Attempts to processes the data paths (requires I/O reading)
-        paths = self.extractor.listAllFilePaths(self.dataPath)
+        paths = self.extractor._listAllFilePaths(self.dataPath)
 
         # Sorting otherwise ordering of elements which isn't
         # significant causes the test to fail
@@ -134,13 +116,10 @@ class TestExtractor(unittest.TestCase):
     @mock.patch("os.path")
     @mock.patch("os.remove")
     def testInitializeLogFile(self, mockRemove, mockPath):
-        """
-        Tests whether the log file can be initialized properly.
-        """
         mockLogPath = "baz"
         mockPath.exists.return_value = True
 
-        self.extractor.initializeLogFile(mockLogPath)
+        self.extractor._initializeLogFile(mockLogPath)
         mockRemove.assert_called_once_with(mockLogPath)
 
 
@@ -150,30 +129,82 @@ class TestDatabase(unittest.TestCase):
     """
 
     def setUp(self):
-        """
-        Constructs an Database instance before running any test.
-        """
         self.database = Database()
 
-    def testInitializeDataFile(self):
-        """
-        Tests whether the data file can be initialized properly.
-        """
-        # Mocking built in opening of file to isolate unit test
+        self.header = ["FR", "ASH", "AWA", "N", "N_OUT",
+                       "EXIT", "MULTI", "DATE", "PATH"]
+
+        self.entryData1 = ["50", "0.30", "-0.55", "110", "0", "0", "0.0",
+                           "16Aug", "../test/results/type_a_subset/16Aug_m_100/"
+                           "exit_time_raw_output_1&-0.55&0.3.csv"]
+        self.entryData2 = ["100", "-0.30", "-0.55", "0", "0", "0", "0.0",
+                           "16Aug", "../test/results/type_a_subset/16Aug_m_100/"
+                           "exit_time_raw_output_1&-0.55&0.3.csv"]
+        self.entryData3 = ["20", "0.60", "-0.55", "130", "0", "0", "0.0",
+                           "16Aug", "../test/results/type_a_subset/16Aug_m_100/"
+                           "exit_time_raw_output_1&-0.55&0.3.csv"]
+
+        self.entry1 = dict(zip(self.header, self.entryData1))
+        self.entry2 = dict(zip(self.header, self.entryData2))
+        self.entry3 = dict(zip(self.header, self.entryData3))
+
+    @mock.patch("csv.reader")
+    def testRead(self, mockReader):
+        mockReader.return_value = iter([self.header, self.entryData1])
+
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
-            database = Database()
-            database.initializeDataFile("bar")
+            database = self.database.read("foo")
 
-            # Asserts whether the header was written into the database file
-            header = database.databaseTemplate.format(*database.dataOrder)
-            mockOpen().write.assert_called_once_with(header)
+            self.assertDictEqual(database[0], self.entry1)
 
-    def testAddDatabaseEntry(self):
-        """
-        Tests whether an entry can be added to the database successfully
-        and in the correct format.
-        """
+    @mock.patch("os.path")
+    @mock.patch("os.remove")
+    def testGenerate(self, mockRemove, mockPath):
+        entries = [self.entry1, self.entry2, self.entry3]
+
+        mockOpen = mock.mock_open()
+        with mock.patch("builtins.open", mockOpen, create=True):
+            self.database.generate("foo", entries)
+
+            # Check whether header was written
+            header = self.database.template.format(*self.database.dataOrder)
+            mockOpen().write.assert_any_call(header)
+
+            # Check whether entries were written
+            for entry in entries:
+                orderedEntry = [entry[order] for order in self.database.dataOrder]
+                orderedEntry = self.database.template.format(*orderedEntry)
+                mockOpen().write.assert_any_call(orderedEntry)
+
+    def testQuery(self):
+        query = \
+        {
+            "FR":       "50",
+            "ASH":      "0.30",
+            "AWA":      "-0.55",
+            "MULTI":    "0.0",
+        }
+        database = [self.entry1]
+        matches = self.database.query(database, query)
+
+        self.assertDictEqual(matches[0], self.entry1)
+
+    def testSort(self):
+        entry4 = self.entry3.copy()
+        entry4["ASH"] = "0.40"
+        database = [self.entry1, self.entry2, self.entry3,
+                    entry4, entry4, entry4, self.entry2]
+        sortedEntries = self.database.sort(database)
+
+        self._assertSorted(iter(sortedEntries))
+
+    def testSanitize(self):
+        database = [self.entry1, self.entry2, self.entry3]
+
+        self.assertListEqual(self.database.sanitize(database), [])
+
+    def test_WriteEntry(self):
         entryData = \
         {
             "FR":       "50",
@@ -187,94 +218,48 @@ class TestDatabase(unittest.TestCase):
             "PATH":     "12Aug_multi_100/exit_time_raw_output_1&-2.0&0.30.csv"
         }
 
-        # Orders the entry data and formats it appropriately
+        # Orders the entry1 data and formats it appropriately
         orderedEntry = [entryData[order] for order in self.database.dataOrder]
-        expectedEntry = self.database.databaseTemplate.format(*orderedEntry)
+        expectedEntry = self.database.template.format(*orderedEntry)
 
-        # Mocking built in opening of file to isolate unit test
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
-            self.database.addEntry("foo", entryData)
+            self.database._writeEntry("foo", entryData)
 
-            # Asserts whether written data matches expected
             mockOpen().write.assert_called_once_with(expectedEntry)
 
-    @mock.patch("csv.reader")
-    def testQueryDatabase(self, mockReader):
-        """
-        Tests whether the database can be queried properly.
-        """
-        query = \
-        {
-            "FR":       "100",
-            "ASH":      "0.30",
-            "AWA":      "-0.55",
-            "MULTI":    "1",
-        }
-
-        entry = \
-        {
-            "N":        "100",
-            "N_OUT":    "0",
-            "EXIT":     "0.0",
-            "DATE":     "16Aug",
-            "PATH":     "../test/results/type_a_subset/16Aug_m_100/"
-                        "exit_time_raw_output_1&-0.55&0.3.csv"
-        }
-        entry.update(query)     # Merges with queries dictionary
-
-        mockReader.return_value = iter([entry.keys(), entry.values()])
-
-        # Mocking built in opening of file to isolate unit test
+    def test_InitializeDataFile(self):
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
-            database = Database()
-            match = database.query("foo", query)[0]
-            self.assertDictEqual(match, entry)
+            self.database._initializeDataFile("bar")
 
-    @mock.patch("os.path")
-    @mock.patch("os.remove")
-    def testPopulateDatabase(self, mockRemove, mockPath):
+            # Asserts whether the header was written into the database file
+            header = self.database.template.format(*self.database.dataOrder)
+            mockOpen().write.assert_called_once_with(header)
+
+    def _assertSorted(self, entries):
         """
-        Tests whether the database can be populated properly.
+        Asserts whether the database is sorted based on fructose
+        concentration then by ASH value (in ascending order).
+
+        :param entries: A list containing the dictionary of entries.
         """
-        entry = \
-        {
+        try:
+            while(True):
+                entryA = next(entries)
+                entryB = next(entries)
 
-            "FR":       "100",
-            "ASH":      "0.30",
-            "AWA":      "-0.55",
-            "MULTI":    "1",
-            "N":        "100",
-            "N_OUT":    "0",
-            "EXIT":     "0.0",
-            "DATE":     "16Aug",
-            "PATH":     "../test/results/type_a_subset/16Aug_m_100/"
-                        "exit_time_raw_output_1&-0.55&0.3.csv"
-        }
-        entry1 = entry.copy()
-        entry1["FR"] = "50"
-        entry2 = entry.copy()
-        entry2["FR"] = "40"
-        entry3 = entry.copy()
-        entry3["FR"] = "30"
-        entries = [entry1, entry2, entry3]
+                fructoseA, ashA = float(entryA["FR"]), float(entryA["ASH"])
+                fructoseB, ashB = float(entryB["FR"]), float(entryB["ASH"])
 
-        # Mocking built in opening of file to isolate unit test
-        mockOpen = mock.mock_open()
-        with mock.patch("builtins.open", mockOpen, create=True):
-            database = Database()
-            database.generate("foo", entries)
+                if fructoseA > fructoseB:
+                    self.fail("Fructose concentrations are not sorted!")
 
-            # Check whether header was written
-            header = database.databaseTemplate.format(*database.dataOrder)
-            mockOpen().write.assert_any_call(header)
-
-            # Check whether entries were written
-            for entry in entries:
-                orderedEntry = [entry[order] for order in database.dataOrder]
-                orderedEntry = database.databaseTemplate.format(*orderedEntry)
-                mockOpen().write.assert_any_call(orderedEntry)
+                if fructoseA == fructoseB:
+                    if ashA > ashB:
+                        self.fail("ASH values are not sorted")
+        except StopIteration:
+            pass
 
 
 ############################# INTEGRATION TESTS ################################
@@ -283,9 +268,6 @@ class TestDatabase(unittest.TestCase):
 class TestIntegration(unittest.TestCase):
 
     def setUp(self):
-        """
-        Runs this method before every test which initializes some variables.
-        """
         self.databaseDir = os.path.join("..", "test", "database")
         self.resultsDir = os.path.join("..", "test", "results")
         settingsPath = os.path.join(".", "settings.ini")
@@ -293,18 +275,12 @@ class TestIntegration(unittest.TestCase):
         self.controller = Controller(settingsPath)
 
     def testReadIniFile(self):
-        """
-        Tests whether the .ini file can be correctly parsed.
-        """
         self.assertListEqual(self.controller.config.sections(), ["PATHS"])
 
-    def testGenerateDatabaseTypeA(self):
-        """
-        Tests whether the type_a database can populate properly.
-        """
-        expectedDatabase = os.path.join(self.databaseDir, "type_a.txt")
-        producedDatabase = os.path.join(self.databaseDir, "type_a_output.txt")
-        log = os.path.join(self.databaseDir, "type_a_error_log.txt")
+    def testGenerateTypeADatabase(self):
+        expectedDatabase = os.path.join(self.databaseDir, "expected", "type_a.txt")
+        producedDatabase = os.path.join(self.databaseDir, "produced", "type_a_output.txt")
+        log = os.path.join(self.databaseDir, "produced", "type_a_error_log.txt")
         results = os.path.join(self.resultsDir, "type_a")
 
         self.controller.config["PATHS"]["results_dir"] = results
@@ -315,32 +291,36 @@ class TestIntegration(unittest.TestCase):
         self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
                                     shallow=False))
 
-    def testQueryDatabaseTypeA(self):
-        """
-        Tests whether the database entries can be queried and fetched correctly.
-        """
-        database = os.path.join(self.databaseDir, "mock.txt")
-        self.controller.config["PATHS"]["database_file"] = database
-
+    def testQueryMockDatabase(self):
+        mockPath = os.path.join(self.databaseDir, "expected", "mock.txt")
+        database = self.controller.database.read(mockPath)
         matches = self.controller.database.query(database, {"FR": 100, "AWA": -1.7})
 
         self.assertTrue(len(matches) == 5)
 
-    def testTidyDatabase(self):
-        """
-        Tests whether irrelevant entries in the database can be removed.
-        """
-        readDatabase = os.path.join(self.databaseDir, "mock")
-        expectedDatabase = os.path.join(self.databaseDir, "mock_tidy.txt")
-        producedDatabase = os.path.join(self.databaseDir, "mock_tidy_output.txt")
-        log = os.path.join(self.databaseDir, "mock_tidy_error_log.txt")
+    def testSanitizeMockDatabase(self):
+        mockPath = os.path.join(self.databaseDir, "expected", "mock.txt")
+        database = self.controller.database.read(mockPath)
+        sanitizedEntries = self.controller.database.sanitize(database)
 
-        self.controller.config["PATHS"]["database_file"] = producedDatabase
-        self.controller.config["PATHS"]["database_log_file"] = log
-        self.controller.database.tidy(readDatabase)
+        self.assertTrue(len(sanitizedEntries) == 7)
 
-        self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
-                                    shallow=False))
+    def testSortMockDatabase(self):
+        mockPath = os.path.join(self.databaseDir, "expected", "mock.txt")
+        mockSorted = os.path.join(self.databaseDir, "expected", "mock_sorted.txt")
+
+        database1 = self.controller.database.read(mockPath)
+        sortedDatabase1 = self.controller.database.sort(database1)
+        sortedDatabase2 = self.controller.database.read(mockSorted)
+
+        if len(sortedDatabase1) != len(sortedDatabase2):
+            self.fail("Sorted database entries does not match expectations!")
+
+        for i, _ in enumerate(sortedDatabase1):
+            print(sortedDatabase1[i])
+            print(sortedDatabase2[i])
+            print()
+            self.assertDictEqual(sortedDatabase1[i], sortedDatabase2[i])
 
 
 ################################# DEBUGGING ####################################
@@ -373,23 +353,5 @@ class Debugger(unittest.TestCase):
             self.assertEqual(contents1[i], contents2[i])
 
 
-def cleanDatabaseDir():
-    """
-    Removes all output and log files generated in the database directory.
-    """
-    deleteFilesContaining = ["log", "output"]
-    databaseDir = os.path.join("..", "test", "database")
-
-    # Lists all the files in the database directory then loops over
-    # all the files and removes any that match a key word in the filter
-    for root, _, files in os.walk(databaseDir):
-        for file in files:
-            for filter in deleteFilesContaining:
-                if filter in file:
-                    os.remove(os.path.join(root, file))
-                    break
-
-
 if __name__ == '__main__':
     unittest.main()
-    #cleanDatabaseDir()
