@@ -282,24 +282,19 @@ class TestIntegration(unittest.TestCase):
                                         "type_a_subset_sorted.txt")
         producedDatabase = os.path.join(self.databaseDir, "produced",
                                         "type_a_subset_output.txt")
-        producedLog = os.path.join(self.databaseDir, "produced",
-                                   "type_a_subset_output_error_log.txt")
+        ignoredDatabase = os.path.join(self.databaseDir, "produced",
+                                       "type_a_subset_ignored.txt")
         results = os.path.join(self.resultsDir, "type_a_subset")
         resultsLog = os.path.join(self.databaseDir, "produced",
                                   "type_a_subset_results_log.txt")
 
         self.controller.config["PATHS"]["results_read"] = results
         self.controller.config["PATHS"]["results_read_log"] = resultsLog
-        self.controller.config["PATHS"]["database_output"] = producedDatabase
-        self.controller.config["PATHS"]["database_output_log"] = producedLog
+        self.controller.config["PATHS"]["database"] = producedDatabase
+        self.controller.config["PATHS"]["database_ignored"] = ignoredDatabase
 
         # Extracting data, sorting then storing it in a database
-        paths = self.controller.config["PATHS"]
-        data = self.controller.extractor.extractAllData(paths["results_read"],
-                                                        paths["results_read_log"])
-        data = self.controller.database.sort(data)
-        self.controller.database.create(paths["database_output"], data)
-
+        self.controller.generateDatabase()
         self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
                                     shallow=False))
 

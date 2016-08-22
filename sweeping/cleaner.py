@@ -177,7 +177,6 @@ class Extractor:
         """
         allPaths = []
         pathList = []
-        expectedResultsDir = dataDirPath.split(os.sep)[-1]
 
         # Generate all the paths for all files starting from the rootPath
         for root, dirs, files in os.walk(dataDirPath):
@@ -190,20 +189,15 @@ class Extractor:
         # "in_spot_processed_output instead of "exit_time_raw_output")
         for pathFromRoot in allPaths:
 
-            # Remove all path components except the last three parts which
-            # have the results dir, data dir, and data file respectively
+            # Remove all path components except the last two parts which
+            # have the data dir, and data file respectively
             path = pathFromRoot.split(os.sep)
-            resultsDir, dataDir, file = path[-3], path[-2], path[-1]
+            dataDir, file = path[-2], path[-1]
 
-            # Filter file paths based on depth from results directory (done
-            # indirectly), file name, and extension
-            if resultsDir == expectedResultsDir:
-                if file.endswith(".csv") and "exit_time_raw_output" in file:
+            # Filter file paths based on file name and extension
+            if file.endswith(".csv") and "exit_time_raw_output" in file:
                     path = os.path.join(dataDir, file)
                     pathList.append(path)
-            else:
-                raise NameError("The following folder is named inconsistently,"
-                                " {}".format(pathFromRoot))
 
         return pathList
 
@@ -306,7 +300,6 @@ class Database:
                                                          float(k["ASH"])))
         return sortedDatabase
 
-    #TODO: Return the purged entries as well perhaps
     def sanitize(self, database):
         """
         Sanitizes the database by removing results that are not considered
@@ -316,7 +309,7 @@ class Database:
         multiple of 100 (implying an error in the data itself).
 
         :param database: A list containing database entries as dictionaries.
-        :return: A list containing the sanitized database entries as
+        :return: A list containing the sanatized database entries as
         dictionaries.
         """
         sanitizedEntries = []
@@ -354,11 +347,11 @@ class Database:
             file.write(header)
 
 
-# TODO: Start implementing the first part of the dumb algorithm
 class Controller:
     """
-    The puppeteer that
-
+    The puppeteer that coordinates everything. Responsible for using the
+    Database and Extractor class to generate and manage the database and also
+    to perform calculations using it.
     """
 
     def __init__(self, settingsPath):
@@ -375,36 +368,159 @@ class Controller:
         self.database = Database()
         self.extractor = Extractor()
 
-    def run(self):
+    def generateDatabase(self):
+        """
+        Generates a a sorted and sanitized database from the options
+        specified in the .ini file.
+
+        The database is initially generated raw then sanitized and sorted to
+        remove irrelevant entries.
+        """
         paths = self.config["PATHS"]
         data = self.extractor.extractAllData(paths["results_read"],
                                              paths["results_read_log"])
-        data = self.database.sort(data)
-        data = self.database.sanitize(data)
-        self.database.create(paths["database_output"], data)
+        sanitized = self.database.sanitize(data)
+        diff = [entry for entry in data if entry not in sanitized]
 
-        for entry in data:
-            uniQuery = {"FR": entry["FR"], "ASH": entry["ASH"],
-                        "MULTI": "0"}
-            multiQuery = {"FR": entry["FR"], "ASH": entry["ASH"],
-                          "AWA": entry["AWA"], "MULTI": "1"}
+        sanitized = self.database.sort(sanitized)
+        diff = self.database.sort(diff)
 
-            uniMatches = self.database.query(data, uniQuery)
-            multiMatches = self.database.query(data, multiQuery)
+        self.database.create(paths["database"], sanitized)
+        if diff:
+            self.database.create(paths["database_ignored"], diff)
 
-            if not uniMatches:
-                print("No Uni matches found!")
+    def generateFructoseTriplets(self):
+        """
+        This function is to be used indirectly to help fit the three parameters
+        (FR, ASH, and AWA) to the theoretical results.
+
+        ASH and AWA are directly defined in the database however FR is not.
+        Rather, the FR in the database ranges from [0..100] which maps to the
+        actual concentrations which are [2 molar, 3 molar, 4 molar]. Therefore,
+        this adds a layer of conversion (and confusion) within this function.
+
+        This function tries to find a fructose triplet, (FR, 1.5*FR, 2*FR)
+        such that FR corresponds to a two molar concentration (since it is
+        defined in the java simulator) and then it calculates it's
+        corresponding goodness of fit.
+
+        In terms of implementation, it reads each line of the sorted database,
+        then proceeds to find a fructose triplets for the given ASH and AWA
+        values. If successful, it first calculates it's goodness of fit
+        and then stores the data in a new file.
+        """
+        database = self.database.read(self.config["PATHS"]["database"])
+        for entry in database:
+            fr = entry["FR"]
+            ash = entry["ASH"]
+            awa = entry["AWA"]
+            oneMolar = int(float(fr) / 2)
+            molarToFr = \
+            {
+                "1": str(oneMolar*1),
+                "2": str(oneMolar*2),
+                "3": str(oneMolar*3),
+                "4": str(oneMolar*4),
+            }
+
+            # Filters out sets of invalid fructose sets since the highest
+            # allowed value is 100 and then attempts to find matches
+            if int(molarToFr["4"]) <= 100:
+                molarToUniQuery = \
+                {
+                    "1": {"FR": molarToFr["1"], "ASH": ash, "MULTI": "0"},
+                    "2": {"FR": molarToFr["2"], "ASH": ash, "MULTI": "0"},
+                    "3": {"FR": molarToFr["3"], "ASH": ash, "MULTI": "0"},
+                    "4": {"FR": molarToFr["4"], "ASH": ash, "MULTI": "0"},
+                }
+                molarToMultiQuery = \
+                {
+                    "1": {"FR": molarToFr["1"], "ASH": ash, "AWA": awa,
+                          "MULTI": "1"},
+                    "2": {"FR": molarToFr["2"], "ASH": ash, "AWA": awa,
+                          "MULTI": "1"},
+                    "3": {"FR": molarToFr["3"], "ASH": ash, "AWA": awa,
+                          "MULTI": "1"},
+                    "4": {"FR": molarToFr["4"], "ASH": ash, "AWA": awa,
+                          "MULTI": "1"},
+                }
+
+                molarToMatchUni = \
+                {
+                    "2": self.database.query(database, molarToUniQuery["2"]),
+                    "3": self.database.query(database, molarToUniQuery["3"]),
+                    "4": self.database.query(database, molarToUniQuery["4"])
+                }
+                molarToMatchMulti = \
+                {
+                    "2": self.database.query(database, molarToMultiQuery["2"]),
+                    "3": self.database.query(database, molarToMultiQuery["3"]),
+                    "4": self.database.query(database, molarToMultiQuery["4"])
+                }
             else:
-                print(uniMatches)
+                continue
 
-            if not multiMatches:
-                print("No multi matches found!")
-            else:
-                print(multiMatches)
+            # Accept fructose triplet only if there is sufficient data
+            # available and store it along with it's calculated goodness fit
+            if all(molarToMatchMulti.values()) and \
+               all(molarToMultiQuery.values()):
 
-            print()
+                data = list(molarToMatchUni.values())[0] + \
+                       list(molarToMatchMulti.values())[0]
+                data = self.database.sort(data)
+
+                molarToExitUni = \
+                {
+                    "2": 35,
+                    "3": 7,
+                    "4": 0
+                }
+                molarToExitMulti = \
+                {
+                    "2": 80,
+                    "3": 50,
+                    "4": 0
+                }
+
+                fitUni = self.computeGoodnessOfFit(molarToMatchUni,
+                                                   molarToExitUni)
+                fitMulti = self.computeGoodnessOfFit(molarToMatchUni,
+                                                     molarToExitMulti)
+                fitness = str(int(fitUni + fitMulti))
+
+                queriesDir = self.config["PATHS"]["queries"]
+                if not os.path.exists(queriesDir):
+                    os.makedirs(queriesDir)
+
+                name = "{}_({}_{}_{}).txt".format(fitness, oneMolar, ash, awa)
+                self.database.create(os.path.join(queriesDir, name), data)
+
+    def computeGoodnessOfFit(self, matchedEntries, molarToExit):
+        """
+        Calculates a modified Pearson's chi-squared metric as a means of
+        measuring goodness of fit. Statistically speaking, the formula is
+        rather rough and not really sound but it is sufficient (at least for
+        the time being).
+
+        :param matchedEntries: A dictionary mapping molar concentration to
+        entries matched which is a list containing entries as dictionaries.
+        :param molarToExit: A dictionary mapping molar concentration to
+        observed exit percentage.
+        :return: A number denoting goodness of fit.
+        """
+        chi = 0
+        for molar, entries in matchedEntries.items():
+            for entry in entries:
+                expected = float(entry["EXIT"])*100
+                observed = float(molarToExit[molar])
+                if expected != 0.0:
+                    chi += (observed - expected)**2 / expected
+                else:
+                    chi += (observed - (expected + 1))**2 / (expected + 1)
+        return chi
 
 
 if __name__ == '__main__':
     controller = Controller("settings.ini")
-    controller.run()
+    controller.generateDatabase()
+    controller.generateFructoseTriplets()
