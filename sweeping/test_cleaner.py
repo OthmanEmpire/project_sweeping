@@ -160,12 +160,12 @@ class TestDatabase(unittest.TestCase):
 
     @mock.patch("os.path")
     @mock.patch("os.remove")
-    def testGenerate(self, mockRemove, mockPath):
+    def testCreate(self, mockRemove, mockPath):
         entries = [self.entry1, self.entry2, self.entry3]
 
         mockOpen = mock.mock_open()
         with mock.patch("builtins.open", mockOpen, create=True):
-            self.database.generate("foo", entries)
+            self.database.create("foo", entries)
 
             # Check whether header was written
             header = self.database.template.format(*self.database.dataOrder)
@@ -277,16 +277,28 @@ class TestIntegration(unittest.TestCase):
     def testReadIniFile(self):
         self.assertListEqual(self.controller.config.sections(), ["PATHS"])
 
-    def testGenerateTypeADatabase(self):
-        expectedDatabase = os.path.join(self.databaseDir, "expected", "type_a.txt")
-        producedDatabase = os.path.join(self.databaseDir, "produced", "type_a_output.txt")
-        log = os.path.join(self.databaseDir, "produced", "type_a_error_log.txt")
-        results = os.path.join(self.resultsDir, "type_a")
+    def testGenerateTypeASubsetDatabase(self):
+        expectedDatabase = os.path.join(self.databaseDir, "expected",
+                                        "type_a_subset_sorted.txt")
+        producedDatabase = os.path.join(self.databaseDir, "produced",
+                                        "type_a_subset_output.txt")
+        producedLog = os.path.join(self.databaseDir, "produced",
+                                   "type_a_subset_output_error_log.txt")
+        results = os.path.join(self.resultsDir, "type_a_subset")
+        resultsLog = os.path.join(self.databaseDir, "produced",
+                                  "type_a_subset_results_log.txt")
 
-        self.controller.config["PATHS"]["results_dir"] = results
-        self.controller.config["PATHS"]["database_file"] = producedDatabase
-        self.controller.config["PATHS"]["database_log_file"] = log
-        self.controller.run()
+        self.controller.config["PATHS"]["results_read"] = results
+        self.controller.config["PATHS"]["results_read_log"] = resultsLog
+        self.controller.config["PATHS"]["database_output"] = producedDatabase
+        self.controller.config["PATHS"]["database_output_log"] = producedLog
+
+        # Extracting data, sorting then storing it in a database
+        paths = self.controller.config["PATHS"]
+        data = self.controller.extractor.extractAllData(paths["results_read"],
+                                                        paths["results_read_log"])
+        data = self.controller.database.sort(data)
+        self.controller.database.create(paths["database_output"], data)
 
         self.assertTrue(filecmp.cmp(producedDatabase, expectedDatabase,
                                     shallow=False))

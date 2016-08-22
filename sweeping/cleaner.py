@@ -4,7 +4,8 @@ much easier from a specific worm (C. Elegans) simulator written in Java.
 
 In a nutshell, it collects scattered data, merged it into a single simple
 text file based database, then queries it to find a goodness of fit for
-certain parameters that can then be thrown into the java simulator.
+certain parameters that can then be thrown into the java simulator once more
+for improved results.
 
 __author__ = "Othman Alikhan"
 __email__ = "sc14omsa@leeds.ac.uk"
@@ -12,11 +13,9 @@ __date__ = "2016-08-15"
 """
 import csv
 import os
-import sys
 import time
 import datetime
 import configparser
-from operator import itemgetter
 
 
 class Extractor:
@@ -253,7 +252,7 @@ class Database:
 
         return allEntries
 
-    def generate(self, databasePath, entries):
+    def create(self, databasePath, entries):
         """
         Populates the database with entries.
 
@@ -307,6 +306,7 @@ class Database:
                                                          float(k["ASH"])))
         return sortedDatabase
 
+    #TODO: Return the purged entries as well perhaps
     def sanitize(self, database):
         """
         Sanitizes the database by removing results that are not considered
@@ -354,6 +354,7 @@ class Database:
             file.write(header)
 
 
+# TODO: Start implementing the first part of the dumb algorithm
 class Controller:
     """
     The puppeteer that
@@ -376,10 +377,32 @@ class Controller:
 
     def run(self):
         paths = self.config["PATHS"]
-        data = self.extractor.extractAllData(paths["results_dir"],
-                                             paths["database_log_file"])
-        self.database.generate(paths["database_file"],
-                               data)
+        data = self.extractor.extractAllData(paths["results_read"],
+                                             paths["results_read_log"])
+        data = self.database.sort(data)
+        data = self.database.sanitize(data)
+        self.database.create(paths["database_output"], data)
+
+        for entry in data:
+            uniQuery = {"FR": entry["FR"], "ASH": entry["ASH"],
+                        "MULTI": "0"}
+            multiQuery = {"FR": entry["FR"], "ASH": entry["ASH"],
+                          "AWA": entry["AWA"], "MULTI": "1"}
+
+            uniMatches = self.database.query(data, uniQuery)
+            multiMatches = self.database.query(data, multiQuery)
+
+            if not uniMatches:
+                print("No Uni matches found!")
+            else:
+                print(uniMatches)
+
+            if not multiMatches:
+                print("No multi matches found!")
+            else:
+                print(multiMatches)
+
+            print()
 
 
 if __name__ == '__main__':
