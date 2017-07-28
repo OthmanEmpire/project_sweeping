@@ -4,7 +4,7 @@ The project is specifically designed to manage data generated from a simulator w
 
 In a nutshell, it collects scattered data, merges it into a single simple text file based database, then queries it to find a goodness of fit for certain parameters that can then be thrown into the java simulator.
 
-The project has been **halted** because an alternative solution has been reached. Many thanks to Dr. Netta Cohen for providing me with guidance and supplying the data throughout.
+The project has been **halted** because an alternative solution has been reached. Many thanks to Dr. Netta Cohen for providing me with guidance.
 
 
 ## Requirements
